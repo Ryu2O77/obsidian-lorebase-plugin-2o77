@@ -1,3 +1,5 @@
+This Fork was made with AI for personal use.
+
 <p align="center">
   <img width="200" height="200" alt="0f0c7f0d-2240-405f-b9a7-ad54ef83c324" src="https://github.com/user-attachments/assets/9a3b0b05-7dec-44b4-a950-a4cbca5ed3d3" />
 </p>
