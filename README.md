@@ -50,7 +50,7 @@ This personal fork adds the following on top of the original plugin:
 - **Metadata language picker when searching** (movies, series, anime, and books) and the **original title** shown small inside the editor (not on the card).
 - **Independent season/part completion**: marking a season or part as completed only fills in the episodes for *that* season/part, not the combined total for the whole series/anime.
 - **TMDB as an additional provider for anime**.
-- **Hidden files**: exclude files from the library that aren't real posters (for example, an exported Notion database file).
+- **Hidden files**: exclude files from the library.
 - **Related media suggestions**: if two notes share a director or franchise, a suggestion to link them appears with a one-click button.
 - **Search by director**: searching TMDB for a name that matches a person also surfaces their filmography as director.
 - **Poster size slider**, preserving aspect ratio, built into the view-mode button (vertical/horizontal/table).
