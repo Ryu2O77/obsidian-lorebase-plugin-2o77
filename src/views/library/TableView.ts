@@ -215,7 +215,9 @@ export class TableView {
                 const box = cell.createSpan({ cls: `lorebase-table-check${checked ? ' is-checked' : ''}`, text: checked ? '\u2713' : '' });
                 if (column.key === 'b:favorite') {
                     box.addClass('is-clickable');
-                    box.addEventListener('click', (event) => {
+                    // The whole cell is clickable, not just the checkmark glyph (which is empty/zero-width when unchecked).
+                    cell.addClass('is-editable');
+                    cell.addEventListener('click', (event) => {
                         event.stopPropagation();
                         this.options.onUpdate(item, { favorite: !item.favorite });
                     });
@@ -316,17 +318,21 @@ export class TableView {
     }
 
     private renderStatusPill(cell: HTMLElement, status: string, label: string, onClick: (event: MouseEvent) => void): void {
-        const pill = cell.createSpan({
+        cell.createSpan({
             cls: `lorebase-table-pill lorebase-table-clickable${status ? ` is-status-${status}` : ' is-empty'}`,
             text: label || '\u2014',
         });
-        pill.addEventListener('click', (event) => { event.stopPropagation(); onClick(event); });
+        // The whole cell is clickable, not just the pill, so you don't have to aim at a short label (or a lone "\u2014").
+        cell.addClass('is-editable');
+        cell.addEventListener('click', (event) => { event.stopPropagation(); onClick(event); });
     }
 
     private renderScore(cell: HTMLElement, value: number | null, onClick: (event: MouseEvent) => void, person = false): void {
         const span = cell.createSpan({ cls: `lorebase-table-score lorebase-table-clickable${person ? ' is-person' : ''}`, text: formatStars(value) || '\u2014' });
         if (value === null) span.addClass('is-empty');
-        span.addEventListener('click', (event) => { event.stopPropagation(); onClick(event); });
+        // The whole cell is clickable, not just the score text, so you don't have to aim at a short label (or a lone "\u2014").
+        cell.addClass('is-editable');
+        cell.addEventListener('click', (event) => { event.stopPropagation(); onClick(event); });
     }
 
     private pickStatus(event: MouseEvent, item: MediaItem): void {
