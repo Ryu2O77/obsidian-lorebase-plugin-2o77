@@ -1,6 +1,8 @@
 import { Menu, MenuItem } from 'obsidian';
 import { AnimeItem, BookItem, GameItem, MediaItem, MediaStatus, MovieItem, RatingBadgeMode, ReadingItem, SeriesItem } from '../../types';
 import { FILTER_ICON_MAP, RATING_CONFIG, RATING_EMOJI, STATUS_ICON_MAP } from '../../constants';
+// RATING_CONFIG and STATUS_ICON_MAP are also used below for the companion ("Status for") submenus,
+// so their rating/status colors and icons stay consistent with the user's own "Change rating"/"Change status" menus.
 import { t } from '../../localization';
 import { completeAllAnime, completeAllBook, completeAllManga, incrementAnimeEpisode, incrementMangaChapter } from './progressActions';
 import { getCompanionStatusLabels } from './companionLabels';
@@ -422,7 +424,9 @@ function addCompanionMenus(menu: Menu, item: MediaItem, deps: MediaContextMenuDe
             const sub = host.setSubmenu();
             for (const status of COMPANION_STATUSES) {
                 sub.addItem((subItem: MenuItem) => {
-                    subItem.setTitle(statusLabels[status]).setChecked(current?.status === status)
+                    subItem.setTitle(statusLabels[status])
+                        .setIcon(STATUS_ICON_MAP[status])
+                        .setChecked(current?.status === status)
                         .onClick(() => applyCompanionChange(item, { person: { name, status } }, deps));
                 });
             }
@@ -436,13 +440,26 @@ function addCompanionMenus(menu: Menu, item: MediaItem, deps: MediaContextMenuDe
             const ratingTitle = `${name} \u00B7 ${t('contextPersonRating')}`;
             host.setTitle(current?.rating ? `${ratingTitle} (${current.rating} \u2605)` : ratingTitle).setIcon('star-half');
             const sub = host.setSubmenu();
-            for (let step = 10; step >= 1; step--) {
-                const rating = step / 2;
+
+            for (const rating of RATING_CONFIG) {
                 sub.addItem((subItem: MenuItem) => {
-                    subItem.setTitle(`${rating} \u2605`).setChecked(current?.rating === rating)
-                        .onClick(() => applyCompanionChange(item, { person: { name, rating } }, deps));
+                    const title = createFragment();
+                    const star = title.createSpan({ cls: 'lorebase-context-rating-star', text: '\u2605' });
+                    star.style.color = rating.color;
+                    title.createSpan({ text: `${rating.value} \u00B7 ${t(rating.labelKey)}` });
+                    subItem.setTitle(title).setChecked(current?.rating === rating.value)
+                        .onClick(() => applyCompanionChange(item, { person: { name, rating: rating.value } }, deps));
                 });
             }
+
+            sub.addSeparator();
+            for (const half of [4.5, 3.5, 2.5, 1.5, 0.5]) {
+                sub.addItem((subItem: MenuItem) => {
+                    subItem.setTitle(`\u2605 ${half}`).setChecked(current?.rating === half)
+                        .onClick(() => applyCompanionChange(item, { person: { name, rating: half } }, deps));
+                });
+            }
+
             sub.addItem((subItem: MenuItem) => {
                 subItem.setTitle(`${String.fromCodePoint(0x1f9f9)} ${t('contextClear')}`)
                     .onClick(() => applyCompanionChange(item, { person: { name, rating: null } }, deps));
