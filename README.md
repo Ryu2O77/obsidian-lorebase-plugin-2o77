@@ -43,19 +43,39 @@
 
 This personal fork adds the following on top of the original plugin:
 
-- **"Status for" (watched with)**: tracks the status and rating of each person you watch/play something with, with quick actions from the card's context menu and bulk editing.
+### 🗂️ Brand-new Table View
+
+A full spreadsheet-style view mode (alongside the original vertical/horizontal grids), built from scratch for this fork:
+
+- **Customizable, reorderable columns** — pick which fields show (any built-in field or custom YAML property), reorder them, and the picker remembers your choice per library.
+- **Inline editing in every cell**: text, numbers, and dates edit in place; list-type fields (tags, genres, platforms, franchise, people, director/author/studio/developer) get a Notion-style multi-select popover.
+- **Notion-like colored tags**: every tag/genre/platform value gets its own color (auto-assigned, and changeable), consistent across the whole table.
+- **Creators column** editable directly in the table for movies, series, and books (director/authors); read-only for anime/manga/games since that column merges more than one field.
+
+### 👥 Social tracking & stats
+
+- **"Status for" (watched with)**: tracks the status and rating of each person you watch/play something with, with quick actions from the card's context menu, bulk editing, and an "add as completed" option (with date) right when creating a new item.
+- **"What do we watch?"** — a random-pick button that only suggests titles still pending for everyone tagged as a companion.
+- **Monthly completion stats** and **per-companion "together" stats** (titles in common, completed together, pending, disagreements) in the Collection Statistics dashboard.
+- **Mass auto-fill**: select several manually-added items and the plugin looks each one up by title and links it to the best provider match automatically, with a live progress screen and a summary of what needs review.
+
+### 🎬 Metadata & media
+
 - **Franchises**: a dedicated field, filter, and grouping by franchise, plus a franchise progress badge on group headers.
 - **Half-star ratings (0.5) across all categories**: games, anime, and manga now accept half-star ratings just like movies, series, and books, including bulk edit, the table view, and right-click.
-- **Bulk delete with confirmation**, to avoid accidentally deleting multiple notes.
 - **Metadata language picker when searching** (movies, series, anime, and books) and the **original title** shown small inside the editor (not on the card).
-- **Independent season/part completion**: marking a season or part as completed only fills in the episodes for *that* season/part, not the combined total for the whole series/anime.
+- **Independent progress completion**: marking a season, part, or manga volume as completed only fills in *that* season/part/volume's own total, never the combined total for the whole series/anime/manga.
 - **TMDB as an additional provider for anime**.
-- **Hidden files**: exclude files from the library.
 - **Related media suggestions**: if two notes share a director or franchise, a suggestion to link them appears with a one-click button.
 - **Search by director**: searching TMDB for a name that matches a person also surfaces their filmography as director.
-- **Poster size slider**, preserving aspect ratio, built into the view-mode button (vertical/horizontal/table).
-- **Director/author/studio/developer editing directly in the table view**.
 - **Keep poster when changing metadata source**, via a "Keep current poster" checkbox when relinking a note.
+- **Manual poster/banner editor**: upload or paste an image for the vertical or horizontal cover without going through a metadata provider.
+
+### 🖼️ Library & cards
+
+- **Hidden files**: exclude files from the library, with a quick hide/unhide action from the context menu.
+- **Poster size slider**, preserving aspect ratio, built into the view-mode button (vertical/horizontal/table).
+- **Bulk delete with confirmation**, to avoid accidentally deleting multiple notes.
 - **Hover preview, Progress footer, and Title below as independent toggles** (previously a single exclusive selector), with quick shortcuts in the view-mode button.
 - **Redesigned "Personal Rating" block** across all four editors, with bigger stars and the rating shown inline.
 - Various cross-category consistency fixes, and fixes to the hover/synopsis overlay across card styles.
