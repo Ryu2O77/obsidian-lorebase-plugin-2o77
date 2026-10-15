@@ -3,6 +3,7 @@
  * Cinematic edit mode for game properties
  */
 
+import { paintStars, starValueFromClick } from './halfStars';
 import { App, Menu, Modal, Notice, TFile, setIcon } from 'obsidian';
 import { GameDlc, GameItem, GameStatus, RelatedMediaLink, TagPreset, UserRating } from '../types';
 import { DEFAULT_COVER, DEFAULT_GAME_TAG_PRESETS, STATUS_CONFIG } from '../constants';
@@ -14,6 +15,10 @@ import { extractMarkdownSection } from '../services/GameService';
 import { normalizeObsidianTag } from '../settings/settingsNormalization';
 import { RelatedMediaEditor } from './RelatedMediaEditor';
 import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
+import { mountPosterEditor, getPosterFolder } from './posterEditor';
+import { CompanionsEditor } from './CompanionsEditor';
+import { WATCHED_WITH_KEYS, collectVaultNames } from '../services/media/people';
+import { getCompanionStatusLabels } from '../views/library/companionLabels';
 
 type GameDlcRefresh = (existing: GameDlc[]) => Promise<GameDlc[] | null>;
 type NotesMode = 'description' | 'myNotes';
@@ -25,6 +30,7 @@ type RegularGameStatus = Exclude<GameStatus, 'wishlist'>;
 export class EditModal extends Modal {
     private game: GameItem;
     private onSave: (updates: Partial<GameItem>) => Promise<void>;
+    private companionsEditor?: CompanionsEditor;
     private onDelete?: () => void;
     private onRefreshCommunityRating?: CommunityRatingRefresh;
     private onRefreshDlc?: GameDlcRefresh;
@@ -36,6 +42,11 @@ export class EditModal extends Modal {
     private statusBeforeWishlist: RegularGameStatus;
     private favorite: boolean;
     private title: string;
+    /** Image shown in the poster card and the vault path chosen in the editor (null = untouched) */
+    private posterDisplay: string | null = null;
+    private horizontalDisplay: string | null = null;
+    private posterStored: string | null = null;
+    private horizontalStored: string | null = null;
     private year: number | null;
     private description: string;
     private myNotes: string;
@@ -121,7 +132,9 @@ export class EditModal extends Modal {
             game.filePath,
             game.relatedMedia ?? [],
             relatedCandidates,
-            incomingRelated
+            incomingRelated,
+            null,
+            game.franchise ?? []
         );
     }
 
@@ -149,6 +162,7 @@ export class EditModal extends Modal {
         this.bindNotes(root);
         this.bindPlanTags(root);
         this.bindTags(root);
+        this.mountCompanions(root);
         this.bindDates(root);
         this.bindAdvanced(root);
         if (this.onRefreshCommunityRating) {
@@ -327,11 +341,11 @@ export class EditModal extends Modal {
                                     <span class="lorebase-editmode-rating-caption">${t('editPersonalRating')}</span>
                                     <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-ghost lorebase-editmode-btn-tight" data-action="clear-rating">${t('editClear')}</button>
                                 </div>
-                                <div class="lorebase-editmode-stars" data-role="stars"></div>
-                                <div class="lorebase-editmode-rating-meta">
+                                <div class="lorebase-editmode-rating-body">
+                                    <div class="lorebase-editmode-stars" data-role="stars"></div>
                                     <span class="lorebase-editmode-rating-value" data-role="rating-value">0.0 / 5.0</span>
-                                    <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 </div>
+                                <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 <div class="lorebase-editmode-rating-line"><span class="lorebase-editmode-rating-line-fill" data-role="rating-line"></span></div>
                             </div>
                             <div class="lorebase-editmode-play-dates">
@@ -372,6 +386,7 @@ export class EditModal extends Modal {
                                 <h3 class="lorebase-editmode-panel-title">${t('editRelatedMedia')}</h3>
                                 <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-tight" data-action="add-related">${t('editAddRelated')}</button>
                             </div>
+                            <div class="lorebase-editmode-related-suggestions" data-role="related-suggestions"></div>
                             <div class="lorebase-editmode-related-list" data-role="related-media"></div>
                         </section>
 
@@ -430,6 +445,8 @@ export class EditModal extends Modal {
                             <input class="lorebase-editmode-input lorebase-editmode-tag-input" type="text" data-field="new-tag" placeholder="${t('editTagPlaceholder')}" />
                         </section>
 
+                        <section class="lorebase-editmode-panel lorebase-editmode-companions" data-role="companions-panel" data-mobile-pane="personal"></section>
+
                         <section class="lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-timestamps" data-mobile-pane="more">
                             <div class="lorebase-editmode-panel-title-row">
                                 <h3 class="lorebase-editmode-panel-title">${t('editDates')}</h3>
@@ -457,6 +474,21 @@ export class EditModal extends Modal {
         if (poster) {
             poster.src = this.game.imageUrl;
             poster.alt = this.game.displayName;
+        }
+
+        const posterCard = poster?.closest<HTMLElement>('.lorebase-editmode-poster-card');
+        if (posterCard && !posterCard.querySelector('.lorebase-poster-editor')) {
+            mountPosterEditor(posterCard, {
+                app: this.app,
+                kind: 'games',
+                getTitle: () => this.title,
+                getFolder: () => getPosterFolder(this.app),
+                supportsHorizontal: true,
+                getDisplay: (target) => target === 'horizontal' ? (this.horizontalDisplay ?? ((this.game as { horizontalImageUrl?: string | null }).horizontalImageUrl ?? '')) : (this.posterDisplay ?? this.game.imageUrl),
+                onChange: (target, change) => {
+                    if (target === 'horizontal') { this.horizontalDisplay = change.display; this.horizontalStored = change.stored; } else { this.posterDisplay = change.display; this.posterStored = change.stored; }
+                },
+            });
         }
 
         const title = this.qs<HTMLInputElement>(root, '[data-field="title"]');
@@ -615,8 +647,8 @@ export class EditModal extends Modal {
                 });
                 btn.textContent = String.fromCharCode(9733);
                 btn.dataset.rating = String(i);
-                btn.addEventListener('click', () => {
-                    this.selectedRating = i as UserRating;
+                btn.addEventListener('click', (event) => {
+                    this.selectedRating = starValueFromClick(btn, i, event);
                     this.updateRatingUI(root);
                 });
             }
@@ -1363,11 +1395,7 @@ export class EditModal extends Modal {
     }
 
     private updateRatingUI(root: HTMLElement): void {
-        root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            const value = Number(btn.dataset.rating ?? '0');
-            const selected = this.selectedRating !== null && value <= this.selectedRating;
-            btn.toggleClass('is-active', selected);
-        });
+        paintStars(root, this.selectedRating);
 
         const ratingValue = this.qs<HTMLElement>(root, '[data-role="rating-value"]');
         const ratingLine = this.qs<HTMLElement>(root, '[data-role="rating-line"]');
@@ -1506,6 +1534,21 @@ export class EditModal extends Modal {
         return this.save();
     }
 
+    private mountCompanions(root: HTMLElement): void {
+        const host = root.querySelector<HTMLElement>('[data-role="companions-panel"]');
+        if (!host) return;
+        this.companionsEditor = new CompanionsEditor(host, {
+            showWatchedWith: true,
+            showFranchise: false,
+            watchedWith: this.game.watchedWith ?? [],
+            companions: this.game.companions ?? [],
+            franchise: [],
+            nameSuggestions: collectVaultNames(this.app, WATCHED_WITH_KEYS),
+            franchiseSuggestions: [],
+            statusLabels: getCompanionStatusLabels('game'),
+        });
+    }
+
     private async save(): Promise<boolean> {
         if (!validateDatePickers(this.datePickers)) return false;
         const updates: Partial<GameItem> = {
@@ -1533,6 +1576,15 @@ export class EditModal extends Modal {
         if (this.selectedStatus === 'completed') {
             updates.finished = updates.finished || this.getTodayDateInput();
         }
+
+        const shared = this.companionsEditor?.getValue();
+        if (shared) {
+            updates.watchedWith = shared.watchedWith;
+            updates.companions = shared.companions;
+        }
+
+        if (this.posterStored !== null) updates.imageUrl = this.posterStored;
+        if (this.horizontalStored !== null) Object.assign(updates, { horizontalImageUrl: this.horizontalStored });
 
         await this.onSave(updates);
         this.close();

@@ -5,7 +5,7 @@ import { requestUrl } from 'obsidian';
  * Matches original 2.0.txt card structure exactly
  */
 
-import { AnimeItem, BookItem, MediaItem, CardSize, CardOrientation, CardStyle, SortField, LorebaseSettings, BadgePosition, MediaStatus, MangaItem, SeriesItem, CompletionDateBadgeFormat } from '../types';
+import { AnimeItem, BookItem, MediaItem, CardSize, CardOrientation, SortField, LorebaseSettings, BadgePosition, MediaStatus, MangaItem, SeriesItem, CompletionDateBadgeFormat, HiddenCardParts } from '../types';
 import { t, i18n } from '../localization';
 import { STATUS_CONFIG, RATING_EMOJI, CARD_SIZES, DEFAULT_COVER, DEFAULT_SETTINGS, HORIZONTAL_CARD_SIZES } from '../constants';
 import {
@@ -49,7 +49,9 @@ export class GameCard {
     private callbacks: CardCallbacks;
     private cardSize: CardSize;
     private orientation: CardOrientation;
-    private cardStyle: CardStyle;
+    private hoverPreview: boolean;
+    private progressFooter: boolean;
+    private titleBelow: boolean;
     private sortField: SortField;
     private badges: LorebaseSettings['badges'];
     private overlayTextLayout: LorebaseSettings['overlayTextLayout'];
@@ -60,6 +62,9 @@ export class GameCard {
     private statusLabels: Partial<Record<MediaStatus, string>>;
     private completionDateBadgeFormat: CompletionDateBadgeFormat;
     private resolveImageUrl: ImageUrlResolver | null;
+    /** Quick size slider multiplier (0.6-1.6); keeps card dimensions in step with the grid layout */
+    private cardScale: number;
+    private hiddenParts: HiddenCardParts;
     private abortController: AbortController;
     private objectUrls: string[] = [];
 
@@ -72,7 +77,8 @@ export class GameCard {
         callbacks: CardCallbacks,
         cardSize: CardSize = 'medium',
         orientation: CardOrientation = 'vertical',
-        cardStyle: CardStyle = 'hover',
+        hoverPreview: boolean = true,
+        progressFooter: boolean = false,
         sortField: SortField = 'name',
         badges: LorebaseSettings['badges'] = {
             status: { enabled: true, position: 'bottom-right', iconOnly: false, x: 70, y: 86 },
@@ -96,13 +102,20 @@ export class GameCard {
         animeProgressVisibility: AnimeProgressVisibility = { showSeason: true, showEpisode: true },
         statusLabels: Partial<Record<MediaStatus, string>> = {},
         completionDateBadgeFormat: CompletionDateBadgeFormat = 'short',
-        resolveImageUrl: ImageUrlResolver | null = null
+        resolveImageUrl: ImageUrlResolver | null = null,
+        cardScale: number = 1,
+        hiddenParts: HiddenCardParts = {},
+        titleBelow: boolean = false
     ) {
+        this.titleBelow = titleBelow;
+        this.hiddenParts = hiddenParts;
+        this.cardScale = Number.isFinite(cardScale) && cardScale > 0 ? cardScale : 1;
         this.game = game;
         this.callbacks = callbacks;
         this.cardSize = cardSize;
         this.orientation = orientation;
-        this.cardStyle = cardStyle;
+        this.hoverPreview = hoverPreview;
+        this.progressFooter = progressFooter;
         this.sortField = sortField;
         this.badges = badges;
         this.overlayTextLayout = overlayTextLayout;
@@ -115,6 +128,7 @@ export class GameCard {
         this.resolveImageUrl = resolveImageUrl;
         this.abortController = new AbortController();
         this.container = parent.createDiv({ cls: 'lorebase-card' });
+        this.container.dataset.lorebasePath = game.filePath;
         GameCard.instances.set(this.container, this);
         if (this.orientation === 'horizontal') {
             this.container.addClass('lorebase-card-horizontal');
@@ -125,12 +139,15 @@ export class GameCard {
     private render(): void {
         const isHorizontal = this.orientation === 'horizontal';
         const isProgressStyle = this.isProgressStyle();
+        const isTitleStyle = this.isTitleStyle();
+        const hasFooter = isProgressStyle || isTitleStyle;
         this.container.toggleClass('is-adult', this.game.isAdult);
         this.container.toggleClass('is-anime', this.game.type === 'anime');
         this.container.toggleClass('is-series', this.game.type === 'series');
         this.container.toggleClass('is-book', this.game.type === 'book');
         this.container.toggleClass('is-manga', this.game.type === 'manga');
-        this.container.toggleClass('lorebase-card-progress-style', isProgressStyle);
+        this.container.toggleClass('lorebase-card-progress-style', hasFooter);
+        this.container.toggleClass('lorebase-card-title-style', isTitleStyle && !isProgressStyle);
         this.container.toggleClass(
             'lorebase-card-favorite-pulse',
             this.badges.favorite.enabled && this.badges.favorite.subtlePulse && this.game.favorite
@@ -138,9 +155,9 @@ export class GameCard {
 
         if (isHorizontal) {
             const sizes = HORIZONTAL_CARD_SIZES[this.cardSize];
-            const horizontalMinWidth = this.dimensionOverrides?.horizontalMinWidth ?? 340;
-            const horizontalHeight = this.dimensionOverrides?.horizontalHeight
-                ?? this.parseCssPixels(sizes.height, 220);
+            const horizontalMinWidth = Math.round((this.dimensionOverrides?.horizontalMinWidth ?? 340) * this.cardScale);
+            const horizontalHeight = Math.round((this.dimensionOverrides?.horizontalHeight
+                ?? this.parseCssPixels(sizes.height, 220)) * this.cardScale);
             this.container.setCssStyles({
                 width: sizes.width,
                 height: `${horizontalHeight}px`,
@@ -164,7 +181,9 @@ export class GameCard {
             const sizes = CARD_SIZES[this.cardSize];
             const ownerWindow = this.container.ownerDocument.defaultView;
             const isPhoneLayout = ownerWindow?.matchMedia('(max-width: 520px)').matches ?? false;
-            const verticalMinHeight = isPhoneLayout
+            // Below 1x the poster ratio alone sets the height; a fixed minimum would keep the card
+            // tall while its width shrinks, which crops the poster instead of scaling it.
+            const verticalMinHeight = isPhoneLayout || this.cardScale < 1
                 ? 0
                 : this.dimensionOverrides?.verticalMinHeight
                     ?? this.parseCssPixels(sizes.minHeight, 380);
@@ -229,13 +248,19 @@ export class GameCard {
             loadCandidate();
         }
 
-        if (!isProgressStyle) {
+        // "Progress footer" / "Title below" add a bar under the poster (rendered further down);
+        // they're independent of "Hover preview" (title/description/year on hover), which only
+        // the Hover preview toggle controls.
+        if (this.hoverPreview) {
             this.renderOverlay(imageContainer);
+        }
+        if (!isProgressStyle) {
             this.renderProgressBadge(imageContainer);
         }
         this.renderBadges(imageContainer);
-        if (isProgressStyle) {
-            this.renderProgressFooter();
+        this.renderCompanions(imageContainer);
+        if (isProgressStyle || isTitleStyle) {
+            this.renderFooter(isProgressStyle, isTitleStyle);
         }
 
         const signal = this.abortController.signal;
@@ -287,11 +312,12 @@ export class GameCard {
 
     private resolveImageCandidate(candidate: string): string {
         if (this.isReadyImageUrl(candidate)) return candidate;
-        return this.resolveImageUrl?.(candidate) || DEFAULT_COVER;
+        // Stale app:// URLs from another session are re-resolved from the file name; if that fails, try as-is.
+        return this.resolveImageUrl?.(candidate) || (/^app:/i.test(candidate) ? candidate : DEFAULT_COVER);
     }
 
     private isReadyImageUrl(value: string): boolean {
-        return /^(https?:|app:|data:|blob:)/i.test(value);
+        return /^(https?:|data:|blob:)/i.test(value);
     }
 
     private getMangaDexImageCandidates(primary: string): string[] {
@@ -373,6 +399,33 @@ export class GameCard {
         this.applyTitleFlowOffset(overlay, titleEl, yearEl, formatEl, descriptionEl);
     }
 
+    /** Small strip with each person the item is shared with: initial, status glyph and their rating. */
+    private renderCompanions(parent: HTMLElement): void {
+        const companions = this.game.companions ?? [];
+        if (!companions.length || this.hiddenParts.companions) return;
+
+        const glyphs: Record<string, string> = {
+            planned: '\u25CB', watching: '\u25B6', completed: '\u2713', dropped: '\u2715', paused: '\u2016',
+        };
+        const strip = parent.createDiv({ cls: 'lorebase-card-companions' });
+        for (const companion of companions) {
+            const details = [companion.name];
+            if (companion.status) details.push(companion.status);
+            if (companion.rating !== null) details.push(`${companion.rating}/5`);
+            const pill = strip.createDiv({
+                cls: `lorebase-card-companion${companion.status ? ` is-${companion.status}` : ''}`,
+                attr: { title: details.join(' \u00B7 ') },
+            });
+            pill.createSpan({ cls: 'lorebase-card-companion-name', text: companion.name });
+            if (companion.status) {
+                pill.createSpan({ cls: 'lorebase-card-companion-status', text: glyphs[companion.status] ?? '' });
+            }
+            if (companion.rating !== null) {
+                pill.createSpan({ cls: 'lorebase-card-companion-rating', text: `\u2605${companion.rating}` });
+            }
+        }
+    }
+
     private renderProgressBadge(parent: HTMLElement): void {
         if (!this.isProgressMedia(this.game)) return;
         if (!this.animeProgressVisibility.showSeason && !this.animeProgressVisibility.showEpisode) return;
@@ -403,15 +456,34 @@ export class GameCard {
         }
     }
 
-    private renderProgressFooter(): void {
-        if (!this.isProgressMedia(this.game)) return;
-        const footer = this.container.createDiv({ cls: 'lorebase-card-progress-footer' });
+    /**
+     * Footer under the poster. "Progress footer" adds the season/episode text and the bar;
+     * "Title below" adds the title (and year). Each one works without the other.
+     */
+    private renderFooter(withProgress: boolean, withTitle: boolean): void {
+        if (withProgress && !this.isProgressMedia(this.game)) {
+            withProgress = false;
+        }
+        if (!withProgress && !withTitle) return;
 
-        const progress = this.getProgressTexts(this.game);
-        const metaParts = [progress?.season, progress?.ep].filter((value): value is string => Boolean(value));
+        const footer = this.container.createDiv({ cls: 'lorebase-card-progress-footer' });
+        if (!withProgress) footer.addClass('is-title-only');
+        if (!withTitle) footer.addClass('is-progress-only');
 
         const header = footer.createDiv({ cls: 'lorebase-card-progress-header' });
-        header.createDiv({ cls: 'lorebase-card-progress-title', text: this.game.displayName });
+        if (withTitle) {
+            header.createDiv({ cls: 'lorebase-card-progress-title', text: this.game.displayName });
+        }
+
+        if (!withProgress) {
+            if (this.game.year) {
+                header.createSpan({ cls: 'lorebase-card-progress-meta', text: String(this.game.year) });
+            }
+            return;
+        }
+
+        const progress = this.getProgressTexts(this.game as AnimeItem | SeriesItem | BookItem | MangaItem);
+        const metaParts = [progress?.season, progress?.ep].filter((value): value is string => Boolean(value));
         if (metaParts.length) {
             header.createSpan({ cls: 'lorebase-card-progress-meta', text: metaParts.join(' \u00B7  ') });
         }
@@ -419,7 +491,7 @@ export class GameCard {
         const row = footer.createDiv({ cls: 'lorebase-card-progress-row' });
         const track = row.createDiv({ cls: 'lorebase-card-progress-track' });
         const fill = track.createDiv({ cls: 'lorebase-card-progress-fill' });
-        fill.setCssStyles({ width: `${this.getProgressPercent(this.game)}%` });
+        fill.setCssStyles({ width: `${this.getProgressPercent(this.game as AnimeItem | SeriesItem | BookItem | MangaItem)}%` });
     }
 
     private renderBadges(parent: HTMLElement): void {
@@ -436,13 +508,13 @@ export class GameCard {
             return group;
         };
 
-        if (this.badges.status.enabled) {
+        if (this.badges.status.enabled && !this.hiddenParts.status) {
             const statusGroup = getGroup(this.badges.status.position);
             statusGroup.addClass('has-status');
             this.renderStatusBadge(statusGroup);
         }
 
-        if (this.badges.rating.enabled && this.game.userRating) {
+        if (this.badges.rating.enabled && !this.hiddenParts.rating && this.game.userRating) {
             this.renderRatingBadge(getGroup(this.badges.rating.position));
         }
 
@@ -502,12 +574,16 @@ export class GameCard {
 
         const ratingBadge = parent.createDiv({ cls: 'lorebase-card-rating' });
         const starText = `\u2605${this.game.userRating}`;
-        const emojiText = RATING_EMOJI[this.game.userRating] ?? '';
+        const emojiText = RATING_EMOJI[Math.round(this.game.userRating)] ?? '';
         const mode = this.badges.rating.mode;
 
         if (mode === 'emoji') {
             ratingBadge.addClass('is-emoji');
             ratingBadge.textContent = emojiText;
+            // Emojis only exist for whole stars: a half star keeps its exact value next to the emoji.
+            if (!Number.isInteger(this.game.userRating)) {
+                ratingBadge.createSpan({ cls: 'lorebase-card-rating-half', text: String(this.game.userRating) });
+            }
             return;
         }
         ratingBadge.textContent = starText;
@@ -620,9 +696,14 @@ export class GameCard {
     }
 
     private isProgressStyle(): boolean {
-        return this.cardStyle === 'progress'
+        return this.progressFooter
             && this.orientation === 'vertical'
             && this.isProgressMedia(this.game);
+    }
+
+    /** "Title below" is its own toggle: title (and year) under the poster, for every category. */
+    private isTitleStyle(): boolean {
+        return this.orientation === 'vertical' && this.titleBelow;
     }
 
     private getProgressPercent(item: AnimeItem | SeriesItem | BookItem | MangaItem): number {

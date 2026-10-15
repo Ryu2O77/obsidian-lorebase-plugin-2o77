@@ -21,8 +21,24 @@ export function parseYear(value: unknown): number | null {
 export function parseUserRating(value: unknown): UserRating {
     const parsed = parseNumber(value);
     if (parsed === null) return null;
-    const rating = Math.trunc(parsed);
-    return rating >= 1 && rating <= 5 ? rating as UserRating : null;
+    const rating = Math.round(parsed * 2) / 2;
+    return rating >= 0.5 && rating <= 5 ? rating : null;
+}
+
+/**
+ * Notes created before half stars existed (or by the Notion converter) keep the whole
+ * star in the rating field and the exact value in `rating_exact`. When both agree
+ * (within one star) the exact half-star value wins.
+ */
+export function resolveExactRating(rating: UserRating, exact: unknown): UserRating {
+    const parsed = parseUserRating(exact);
+    if (parsed !== null && rating !== null && Math.abs(parsed - rating) < 1) return parsed;
+    return rating;
+}
+
+/** Rating bucket (1..5) used by emoji badges and distribution charts. */
+export function ratingBucket(rating: number): 1 | 2 | 3 | 4 | 5 {
+    return Math.min(5, Math.max(1, Math.round(rating))) as 1 | 2 | 3 | 4 | 5;
 }
 
 export function parseRelatedMedia(raw: unknown): RelatedMediaLink[] {

@@ -3,15 +3,19 @@
  * Handles anime data loading, caching, filtering, and sorting
  */
 
+import { isFileHidden } from './media/hiddenFiles';
 import { App, TFile, TFolder } from 'obsidian';
 import { AnimeFormat, AnimeItem, AnimePart, AnimeStatus, AnimeStats, FilterState, SortField, SortOrder } from '../types';
 import { MetadataService } from './MetadataService';
 import { DEFAULT_COVER } from '../constants';
 import { filterAndSortMedia } from './media/filtering';
 import { extractSimpleFrontmatter } from './media/libraryViewState';
-import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia } from './media/parsers';
+import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia, ratingBucket } from './media/parsers';
 import { collectFieldTags, collectTags, getAllMarkdownFiles, isTruthy, mapInFrameBatches, normalizeCacheTags } from './media/serviceUtils';
 import { upsertMarkdownSection } from './markdownSections';
+import { toStoredImagePath } from './media/imagePaths';
+import { completePartsProgress } from './media/seriesProgress';
+import { PLATFORM_KEYS, WATCHED_WITH_KEYS, companionFrontmatter, readCompanions, readNameList, serializeNameList } from './media/people';
 
 export class AnimeService {
     private app: App;
@@ -197,6 +201,7 @@ export class AnimeService {
     }
 
     public parseAnimeFromCache(file: TFile): AnimeItem | null {
+        if (isFileHidden(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)) return null;
         try {
             const cache = this.app.metadataCache.getFileCache(file);
             const metadata = cache?.frontmatter || {};
@@ -223,6 +228,7 @@ export class AnimeService {
             let integrationProvider: AnimeItem['integrationProvider'] = integrationProviderRaw === 'anilist'
                 || integrationProviderRaw === 'jikan'
                 || integrationProviderRaw === 'shikimori'
+                || integrationProviderRaw === 'tmdb'
                 ? integrationProviderRaw
                 : null;
             let integrationId = typeof metadata.integration_id === 'string' || typeof metadata.integration_id === 'number'
@@ -284,6 +290,7 @@ export class AnimeService {
                 type: 'anime',
                 filePath: file.path,
                 displayName: title || 'Unknown',
+                originalTitle: (typeof metadata.original_title === 'string' ? metadata.original_title.trim() : '') || undefined,
                 nameLower: (title || 'unknown').toLowerCase(),
                 year: parseYear(metadata.year),
                 description: summaryText,
@@ -294,6 +301,9 @@ export class AnimeService {
                 imageUrl: verticalImageUrl || rawVerticalImage || horizontalImageUrl || rawHorizontalImage || DEFAULT_COVER,
                 horizontalImageUrl: horizontalImageUrl || rawHorizontalImage || verticalImageUrl || rawVerticalImage || null,
                 hasCustomPoster: Boolean(metadata.cm_poster),
+                watchedWith: readNameList(metadata, WATCHED_WITH_KEYS),
+                platforms: readNameList(metadata, PLATFORM_KEYS),
+                companions: readCompanions(metadata, readNameList(metadata, WATCHED_WITH_KEYS)),
                 isAdult: false,
                 format,
                 status,
@@ -377,7 +387,26 @@ export class AnimeService {
             frontmatterUpdates.userRating = null;
         }
         if ('format' in updates) frontmatterUpdates.format = updates.format;
+        if ('watchedWith' in updates) {
+            const key = WATCHED_WITH_KEYS.find((candidate) => frontmatter && Object.prototype.hasOwnProperty.call(frontmatter, candidate)) ?? WATCHED_WITH_KEYS[0];
+            frontmatterUpdates[key] = serializeNameList(updates.watchedWith);
+        }
+        if ('companions' in updates) Object.assign(frontmatterUpdates, companionFrontmatter(updates.companions ?? []));
+        if ('platforms' in updates) {
+            const key = PLATFORM_KEYS.find((candidate) => frontmatter && Object.prototype.hasOwnProperty.call(frontmatter, candidate)) ?? PLATFORM_KEYS[0];
+            frontmatterUpdates[key] = serializeNameList(updates.platforms);
+        }
+        if ('imageUrl' in updates) {
+            frontmatterUpdates[this.imageKey(frontmatter, ['image', 'poster'], 'poster')] = toStoredImagePath(this.app, updates.imageUrl ?? '') || null;
+        }
+        if ('horizontalImageUrl' in updates) {
+            const horizontal = (updates as { horizontalImageUrl?: string | null }).horizontalImageUrl;
+            frontmatterUpdates[this.imageKey(frontmatter, ['image_b', 'poster_b'], 'poster_b')] = toStoredImagePath(this.app, horizontal ?? '') || null;
+        }
         let parts = updates.parts ?? anime.parts;
+        if (updates.status === 'completed' && !('parts' in updates) && parts?.length) {
+            parts = completePartsProgress(parts);
+        }
         let activePartId = updates.activePartId !== undefined ? updates.activePartId : anime.activePartId;
         if (parts && parts.length > 0) {
             const activePart = this.getActivePart(parts, activePartId);
@@ -421,6 +450,11 @@ export class AnimeService {
         if ('myNotes' in updates) {
             await this.updateMyNotesSection(file, updates.myNotes ?? '');
         }
+    }
+
+    /** Existing image key of the note (so its own naming is kept), or the default one. */
+    private imageKey(frontmatter: Record<string, unknown> | null | undefined, keys: string[], fallback: string): string {
+        return keys.find((key) => frontmatter && Object.prototype.hasOwnProperty.call(frontmatter, key)) ?? fallback;
     }
 
     private async updateMyNotesSection(file: TFile, value: string): Promise<void> {
@@ -534,7 +568,7 @@ export class AnimeService {
             if (item.userRating) {
                 stats.withRating++;
                 ratingSum += item.userRating;
-                stats.ratingDistribution[item.userRating]++;
+                stats.ratingDistribution[ratingBucket(item.userRating)]++;
             }
         }
 

@@ -3,8 +3,10 @@
  * v3.0.1
  */
 
+import { parseNameList } from './services/media/people';
+import { configureHiddenFiles } from './services/media/hiddenFiles';
 import { Plugin, WorkspaceLeaf, Menu, Notice, addIcon, TFile, type Command } from 'obsidian';
-import { CommunityRating, GameDlc, LorebaseSettings, MediaItem, GameStats, AnimeStats, MediaType, RelatedMediaLink, IntegrationTemplateSettings } from './types';
+import { AutoFillOutcome, CommunityRating, LibrarySettings, GameDlc, LorebaseSettings, MediaItem, GameStats, AnimeStats, MediaType, RelatedMediaLink, IntegrationTemplateSettings } from './types';
 import { DEFAULT_SETTINGS, VIEW_TYPE_LIBRARY, LOREBASE_ICON_ID, LOREBASE_ICON_SVG, DEFAULT_COVER, PARTICLE_INTENSITY_MAX, PARTICLE_INTENSITY_MIN } from './constants';
 import { i18n, t, type TranslationKey } from './localization';
 import { LibraryView } from './views/LibraryView';
@@ -27,6 +29,7 @@ import { IntegrationService } from './services/IntegrationService';
 import { SteamSyncService } from './services/SteamSyncService';
 import { MetadataService } from './services/MetadataService';
 import { NoteConversionService } from './services/NoteConversionService';
+import { repairResourceUrlImages } from './services/integrations/imageStorage';
 import {
     mergeOverlayLayout,
     mergeOverlayVisibility,
@@ -40,7 +43,7 @@ import {
 import { parseRelatedMedia } from './services/media/parsers';
 import type { MediaKind, MediaSourceSelection } from './services/integrations/types';
 import { buildSimpleTemplate, getDefaultTemplateFields, getEffectiveSimpleTemplateFields } from './services/integrations/templateUtils';
-import { mediaTypeToKind, synchronizeProviderMetadata } from './services/integrations/enrichment';
+import { applyMetadataLanguage, mediaTypeToKind, synchronizeProviderMetadata } from './services/integrations/enrichment';
 
 // =============================================================================
 // LOREBASE PLUGIN
@@ -69,6 +72,11 @@ export default class LorebasePlugin extends Plugin {
     async onload(): Promise<void> {
         // Load settings
         await this.loadSettings();
+        const start = this.settings.startMediaType;
+        const startType = start === 'last' ? this.settings.lastMediaType : start;
+        if (startType && ['game', 'anime', 'movie', 'series', 'book', 'manga'].includes(startType)) {
+            this.mediaType = startType;
+        }
         this.normalizeMediaType();
 
         // Initialize localization
@@ -111,6 +119,21 @@ export default class LorebasePlugin extends Plugin {
         });
 
         this.registerOpenLibraryCommands();
+
+        this.addLocalizedCommand('commandRepairPosters', {
+            id: 'repair-poster-paths',
+            callback: () => {
+                void (async (): Promise<void> => {
+                    try {
+                        const result = await repairResourceUrlImages(this.app, this.settings);
+                        this.refreshViews();
+                        new Notice(`${t('repairPostersDone')}: ${result.fixed}`);
+                    } catch (error) {
+                        console.error('[Lorebase] Poster repair failed', error);
+                    }
+                })();
+            }
+        });
 
         this.addLocalizedCommand('commandAddGame', {
             id: 'add-game',
@@ -202,6 +225,8 @@ export default class LorebasePlugin extends Plugin {
     /**
      * Load plugin settings
      */
+    private hiddenSignature = '';
+
     async loadSettings(): Promise<void> {
         const loaded: unknown = await this.loadData();
         const sanitized = this.isSettingsRecord(loaded) ? { ...loaded } : {};
@@ -210,6 +235,13 @@ export default class LorebasePlugin extends Plugin {
         this.settings.particleIntensity = Number.isFinite(particleIntensity)
             ? Math.min(PARTICLE_INTENSITY_MAX, Math.max(PARTICLE_INTENSITY_MIN, Math.round(particleIntensity)))
             : DEFAULT_SETTINGS.particleIntensity;
+        const hiddenRaw = (sanitized as { hiddenFiles?: { patterns?: unknown; showHidden?: unknown } }).hiddenFiles;
+        this.settings.hiddenFiles = {
+            patterns: typeof hiddenRaw?.patterns === 'string' ? hiddenRaw.patterns : '',
+            showHidden: hiddenRaw?.showHidden === true,
+        };
+        configureHiddenFiles(this.settings.hiddenFiles);
+        this.hiddenSignature = JSON.stringify(this.settings.hiddenFiles);
         this.settings.settingsLayoutMode = sanitized.settingsLayoutMode === 'accordion'
             ? 'accordion'
             : 'tabs';
@@ -260,10 +292,28 @@ export default class LorebasePlugin extends Plugin {
             this.settings.enabledMedia = Object.assign({}, DEFAULT_SETTINGS.enabledMedia, sanitized.enabledMedia);
         }
         this.settings.migrations = Object.assign({}, DEFAULT_SETTINGS.migrations, sanitized?.migrations ?? {});
-        if (!this.settings.migrations.animeProgressCardStyle && this.settings.anime.cardStyle === 'hover') {
-            this.settings.anime.cardStyle = 'progress';
+        // "Hover preview" and "Progress footer" used to be one `cardStyle` select ('hover' | 'progress' |
+        // the even older 'title'); each is now its own toggle, like "Title below" already was.
+        const animeLegacyCardStyle = (this.settings.anime as LibrarySettings & { cardStyle?: string }).cardStyle;
+        for (const key of ['games', 'anime', 'movies', 'series', 'books', 'manga'] as const) {
+            const library = this.settings[key] as LibrarySettings & { cardStyle?: string };
+            if (typeof library.hoverPreview !== 'boolean' || typeof library.progressFooter !== 'boolean') {
+                const legacyStyle = library.cardStyle;
+                library.hoverPreview = true;
+                library.progressFooter = legacyStyle === 'progress';
+                if (legacyStyle === 'title') library.titleBelow = true;
+            }
+            if (typeof library.titleBelow !== 'boolean') library.titleBelow = false;
+            delete library.cardStyle;
+        }
+        // One-time bump: accounts that never touched anime's style (still at the old 'hover' default)
+        // get the newer 'progress footer' default, same as this migration did before the toggle split.
+        if (!this.settings.migrations.animeProgressCardStyle && (animeLegacyCardStyle ?? 'hover') === 'hover') {
+            this.settings.anime.progressFooter = true;
             this.settings.migrations.animeProgressCardStyle = true;
             void this.saveData(this.settings);
+        } else if (!this.settings.migrations.animeProgressCardStyle) {
+            this.settings.migrations.animeProgressCardStyle = true;
         }
         this.settings.steamSync = Object.assign({}, DEFAULT_SETTINGS.steamSync, sanitized?.steamSync ?? {});
         this.settings.steamSync.fields = Object.assign(
@@ -552,7 +602,7 @@ export default class LorebasePlugin extends Plugin {
             const animeProvider = String(integrations.media?.anime?.provider ?? '');
             if (animeProvider === 'omdb') {
                 integrations.media.anime.provider = 'anilist';
-            } else if (!['anilist', 'jikan', 'shikimori'].includes(animeProvider)) {
+            } else if (!['anilist', 'jikan', 'shikimori', 'tmdb'].includes(animeProvider)) {
                 integrations.media.anime.provider = 'anilist';
             }
             const booksProvider = String(integrations.media?.books?.provider ?? '');
@@ -724,6 +774,12 @@ export default class LorebasePlugin extends Plugin {
      */
     async saveSettings(): Promise<void> {
         await this.saveData(this.settings);
+        const hiddenSignature = JSON.stringify(this.settings.hiddenFiles);
+        configureHiddenFiles(this.settings.hiddenFiles);
+        if (hiddenSignature !== this.hiddenSignature) {
+            this.hiddenSignature = hiddenSignature;
+            this.invalidateAllServiceCaches();
+        }
 
         // Update game service folder path if changed
         if (this.gameService) {
@@ -761,6 +817,10 @@ export default class LorebasePlugin extends Plugin {
     async activateView(mediaType?: MediaType): Promise<void> {
         if (mediaType) {
             this.mediaType = mediaType;
+            if (this.settings.lastMediaType !== mediaType) {
+                this.settings.lastMediaType = mediaType;
+                void this.saveData(this.settings);
+            }
         }
 
         const { workspace } = this.app;
@@ -1030,7 +1090,12 @@ export default class LorebasePlugin extends Plugin {
         modal.open();
     }
 
-    async enrichMediaItem(item: MediaItem, relink = false, onSave?: () => void): Promise<boolean> {
+    async enrichMediaItem(
+        item: MediaItem,
+        relink = false,
+        onSave?: () => void,
+        options: { source?: MediaSourceSelection; quiet?: boolean } = {}
+    ): Promise<boolean> {
         if (!this.integrationService || !this.metadataService) return false;
         const kind = mediaTypeToKind(item.type);
         if (!kind) return false;
@@ -1044,42 +1109,55 @@ export default class LorebasePlugin extends Plugin {
                 : {};
             delete current.position;
             const searchTitle = this.getMediaSearchTitle(item, current);
+            const previousLanguage = typeof current.metadata_language === 'string' ? current.metadata_language.trim() : '';
 
             let source: MediaSourceSelection | null = null;
             const provider = typeof item.integrationProvider === 'string'
                 ? item.integrationProvider
                 : null;
             const id = item.integrationId ? String(item.integrationId).trim() : '';
-            if (!relink && provider && id) {
+            if (options.source) {
+                source = options.source;
+            } else if (!relink && provider && id) {
                 source = {
                     provider,
                     id,
                     title: searchTitle,
                     year: item.year ? String(item.year) : undefined,
                     image: item.imageUrl || undefined,
+                    // Keep loading the metadata in the language chosen the last time.
+                    language: previousLanguage || undefined,
                 };
             } else {
                 source = await this.integrationService.selectMediaSource(
                     kind,
                     searchTitle,
-                    provider ?? undefined
+                    provider ?? undefined,
+                    relink
                 );
             }
             if (!source) return false;
 
-            new Notice(t('notifyLoading'), 1200);
+            if (!options.quiet) new Notice(t('notifyLoading'), 1200);
             const enrichment = await this.integrationService.getMediaEnrichment(kind, source);
             if (!enrichment) {
-                new Notice(t('noticeSourceFailed'));
+                if (!options.quiet) new Notice(t('noticeSourceFailed'));
                 return false;
             }
             const incoming = { ...enrichment.values };
-            if (current.cm_poster) {
+            const incomingOriginalTitle = typeof incoming.original_title === 'string' ? incoming.original_title.trim() : '';
+            delete incoming.original_title;
+            if (current.cm_poster || source.keepPoster) {
                 delete incoming.poster;
                 delete incoming.poster_b;
             }
             const merged = synchronizeProviderMetadata(current, incoming, source);
             this.repairGeneratedSteamPoster(current, incoming, source, merged);
+            if (incomingOriginalTitle) merged.patch.original_title = incomingOriginalTitle;
+            // Choosing another metadata language (TMDB) also replaces the title, as the user asked for it.
+            if (source.provider === 'tmdb' && !options.source) {
+                applyMetadataLanguage(current, incoming, merged, source.language ?? '');
+            }
             await this.metadataService.updateMetadata(file, merged.patch);
 
             const mergedSourceUrl = [merged.values.url, merged.values.source_url]
@@ -1091,6 +1169,7 @@ export default class LorebasePlugin extends Plugin {
                 sourceUrl: mergedSourceUrl?.trim() ?? item.sourceUrl ?? null,
             });
             this.invalidateAllServiceCaches();
+            if (options.quiet) return true;
             this.refreshViews();
             onSave?.();
 
@@ -1101,8 +1180,34 @@ export default class LorebasePlugin extends Plugin {
             return true;
         } catch (error) {
             console.error('[LOREBASE Enrichment] Failed to enrich media item:', error);
-            new Notice(t('noticeSourceFailed'));
+            if (!options.quiet) new Notice(t('noticeSourceFailed'));
             return false;
+        }
+    }
+
+    /** Finds the best provider match for an item by title and links it, without any prompts. */
+    async autoFillMediaItem(item: MediaItem, acceptFirst: boolean): Promise<AutoFillOutcome> {
+        if (!this.integrationService) return { status: 'failed' };
+        const kind = mediaTypeToKind(item.type);
+        if (!kind) return { status: 'failed' };
+        try {
+            const file = this.app.vault.getAbstractFileByPath(item.filePath);
+            if (!(file instanceof TFile)) return { status: 'failed' };
+            const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+            const current = frontmatter && typeof frontmatter === 'object'
+                ? { ...frontmatter } as Record<string, unknown>
+                : {};
+            delete current.position;
+            const title = this.getMediaSearchTitle(item, current);
+            const pick = await this.integrationService.autoSelectMediaSource(kind, title, item.year ?? null, acceptFirst);
+            if (!pick.source) {
+                return { status: pick.reason === 'review' ? 'review' : 'notfound', candidate: pick.candidate };
+            }
+            const linked = await this.enrichMediaItem(item, true, undefined, { source: pick.source, quiet: true });
+            return { status: linked ? 'linked' : 'failed', candidate: pick.candidate };
+        } catch (error) {
+            console.error('[LOREBASE AutoFill] Failed for', item.filePath, error);
+            return { status: 'failed' };
         }
     }
 
@@ -1240,6 +1345,8 @@ export default class LorebasePlugin extends Plugin {
                 path: file.path,
                 title: this.getFileTitle(file),
                 imageUrl: this.getFileImage(file),
+                director: (this.getFrontmatterValue(file, 'director') as string | undefined) ?? null,
+                franchise: parseNameList(this.getFrontmatterValue(file, 'franchise')),
             });
             seen.add(file.path);
         }
@@ -1309,8 +1416,8 @@ export default class LorebasePlugin extends Plugin {
     /**
      * Show statistics modal
      */
-    showStatsModal(stats: GameStats | AnimeStats, mediaType: MediaType): void {
-        const modal = new StatsModal(this.app, stats, mediaType);
+    showStatsModal(stats: GameStats | AnimeStats, mediaType: MediaType, items: MediaItem[] = []): void {
+        const modal = new StatsModal(this.app, stats, mediaType, items);
         modal.open();
     }
 

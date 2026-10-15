@@ -19,6 +19,7 @@ export interface VirtualGroup<T> {
     key: string;
     label: string;
     items: T[];
+    progress?: { text: string; title: string };
 }
 
 export interface VirtualGroupedGridOptions<T> extends Omit<VirtualGridOptions<T>, 'items'> {
@@ -279,6 +280,7 @@ export class VirtualGroupedGrid<T> implements VirtualGridController {
                 cls: 'lorebase-series-title lorebase-view-group-title lorebase-virtual-group-title',
             });
             header.createSpan({ text: group.label });
+            if (group.progress) header.createSpan({ cls: 'lorebase-view-group-progress', text: group.progress.text, attr: { title: group.progress.title } });
             header.createSpan({ cls: 'lorebase-view-group-count', text: String(group.items.length) });
             header.style.borderLeftColor = this.options.colors[
                 groupIndex % Math.max(1, this.options.colors.length)

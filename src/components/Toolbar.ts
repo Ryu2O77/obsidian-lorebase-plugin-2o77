@@ -15,16 +15,16 @@ import {
     SortField,
     SortOrder,
     ViewMode,
-} from '../types';
+ HiddenCardParts } from '../types';
 import { i18n, t } from '../localization';
 import { SEARCH_DEBOUNCE_MS } from '../constants';
 import { DropdownManager } from './toolbar/DropdownManager';
 import { hasActiveTagFilters } from './toolbar/stateUtils';
-import { TagGroups, TagSummary, ToolbarCallbacks } from './toolbar/types';
+import { CardStyleFlags, TagGroups, TagSummary, ToolbarCallbacks } from './toolbar/types';
 import { cloneLibraryViewState, createRuleId, libraryViewStatesEqual } from '../services/media/libraryViewState';
 import { createLorebaseDropdown, LorebaseDropdownOption } from './LorebaseDropdown';
 
-export type { ToolbarCallbacks } from './toolbar/types';
+export type { CardStyleFlags, ToolbarCallbacks } from './toolbar/types';
 
 // =============================================================================
 // TOOLBAR COMPONENT
@@ -39,6 +39,9 @@ export class Toolbar {
     private currentSort: { field: SortField; order: SortOrder };
     private currentFilter: FilterState;
     private currentViewMode: ViewMode;
+    private currentCardScale: number;
+    private hiddenCardParts: HiddenCardParts;
+    private cardStyleFlags: CardStyleFlags;
     private sortOptions: Array<{ field: SortField; label: string }>;
     private availableTags: TagGroups = { planTags: [], tags: [], genres: [] };
     private searchTimeout: number | null = null;
@@ -74,12 +77,18 @@ export class Toolbar {
         fieldDefinitions: FieldDefinition[],
         defaultViewState: LibraryViewState,
         currentMediaType: MediaType,
-        enabledMediaTypes: MediaType[]
+        enabledMediaTypes: MediaType[],
+        initialCardScale: number = 1,
+        initialHiddenParts: HiddenCardParts = {},
+        initialCardStyleFlags: CardStyleFlags = { hoverPreview: true, progressFooter: false, titleBelow: false }
     ) {
+        this.hiddenCardParts = { ...initialHiddenParts };
+        this.cardStyleFlags = { ...initialCardStyleFlags };
         this.callbacks = callbacks;
         this.currentSort = initialSort;
         this.currentFilter = initialFilter;
         this.currentViewMode = initialViewMode;
+        this.currentCardScale = initialCardScale;
         this.sortOptions = sortOptions;
         this.randomLabel = randomLabel;
         this.currentViewState = cloneLibraryViewState(viewState);
@@ -88,6 +97,7 @@ export class Toolbar {
         this.fieldDefinitions = fieldDefinitions;
         this.defaultViewState = cloneLibraryViewState(defaultViewState);
         this.currentMediaType = currentMediaType;
+        this.syncTogetherVisibility();
         this.enabledMediaTypes = [...enabledMediaTypes];
         this.mediaTrayKeyHandler = (event: KeyboardEvent): void => {
             if (event.key !== 'Escape' || !this.mediaTrayOpen) return;
@@ -177,6 +187,8 @@ export class Toolbar {
         this.renderAddButton(centerControls);
 
         this.renderRandomButton(rightControls);
+        this.renderTogetherButton(rightControls);
+        this.renderSelectionButton(rightControls);
         this.renderViewModeControl(rightControls);
         this.renderSettingsControl(rightControls);
 
@@ -266,6 +278,7 @@ export class Toolbar {
             button.addEventListener('click', () => {
                 if (mediaType === this.currentMediaType) return;
                 this.currentMediaType = mediaType;
+                this.syncTogetherVisibility();
                 this.render();
                 this.callbacks.onMediaTypeChange(mediaType);
             });
@@ -507,6 +520,9 @@ export class Toolbar {
         if (this.fieldDefinitions.some((field) => field.id === 'series')) {
             options.push({ value: 'series', label: copy.series });
         }
+        if (this.fieldDefinitions.some((field) => field.id === 'franchise')) {
+            options.push({ value: 'franchise', label: copy.franchise });
+        }
         options.push(
             { value: 'finishedMonth', label: copy.finishedMonth },
             { value: 'finishedYear', label: copy.finishedYear }
@@ -702,7 +718,7 @@ export class Toolbar {
     private viewText(): {
         configure: string; modified: string; baseView: string; savedViews: string; reset: string;
         update: string; deleteView: string; viewName: string; saveAs: string; sortBy: string;
-        groupBy: string; noGrouping: string; series: string; finishedMonth: string; finishedYear: string;
+        groupBy: string; noGrouping: string; series: string; franchise: string; finishedMonth: string; finishedYear: string;
         filters: string; noFilters: string; addFilter: string; builtIn: string; noteFields: string;
         additional: string; showMore: string; showLess: string;
         missingField: string; remove: string; rename: string; from: string; to: string; operators: Record<string, string>;
@@ -713,7 +729,7 @@ export class Toolbar {
             savedViews: 'Сохранённые виды', reset: 'Сбросить', update: 'Обновить вид',
             deleteView: 'Удалить вид', viewName: 'Название вида', saveAs: 'Сохранить как',
             sortBy: 'Сортировка', groupBy: 'Группировка', noGrouping: 'Без группировки',
-            series: 'По серии', finishedMonth: 'По месяцу окончания', finishedYear: 'По году окончания',
+            series: 'По серии', franchise: 'По франшизе', finishedMonth: 'По месяцу окончания', finishedYear: 'По году окончания',
             filters: 'Фильтры', noFilters: 'Нет активных фильтров', addFilter: 'Добавить фильтр',
             builtIn: 'Основные', noteFields: 'Поля заметок', missingField: 'Поле отсутствует',
             additional: 'Дополнительные', showMore: 'Показать ещё', showLess: 'Скрыть дополнительные',
@@ -731,7 +747,7 @@ export class Toolbar {
             savedViews: 'Збережені вигляди', reset: 'Скинути', update: 'Оновити вигляд',
             deleteView: 'Видалити вигляд', viewName: 'Назва вигляду', saveAs: 'Зберегти як',
             sortBy: 'Сортування', groupBy: 'Групування', noGrouping: 'Без групування',
-            series: 'За серією', finishedMonth: 'За місяцем завершення', finishedYear: 'За роком завершення',
+            series: 'За серією', franchise: 'За франшизою', finishedMonth: 'За місяцем завершення', finishedYear: 'За роком завершення',
             filters: 'Фільтри', noFilters: 'Немає активних фільтрів', addFilter: 'Додати фільтр',
             builtIn: 'Основні', noteFields: 'Поля нотаток', missingField: 'Поле відсутнє',
             additional: 'Додаткові', showMore: 'Показати ще', showLess: 'Сховати додаткові',
@@ -749,7 +765,7 @@ export class Toolbar {
             savedViews: 'Saved views', reset: 'Reset', update: 'Update view',
             deleteView: 'Delete view', viewName: 'View name', saveAs: 'Save as',
             sortBy: 'Sort', groupBy: 'Group', noGrouping: 'No grouping',
-            series: 'By series', finishedMonth: 'By finish month', finishedYear: 'By finish year',
+            series: 'By series', franchise: 'By franchise', finishedMonth: 'By finish month', finishedYear: 'By finish year',
             filters: 'Filters', noFilters: 'No active filters', addFilter: 'Add filter',
             builtIn: 'Built in', noteFields: 'Note fields', missingField: 'Missing field',
             additional: 'Additional', showMore: 'Show more', showLess: 'Show less',
@@ -882,6 +898,51 @@ export class Toolbar {
         addBtn.addEventListener('click', () => this.callbacks.onAdd());
     }
 
+    private togetherBtn: HTMLButtonElement | null = null;
+
+    private renderTogetherButton(parent: HTMLElement): void {
+        if (!this.callbacks.onTogether) return;
+        const label = t('togetherButton');
+        const btn = parent.createEl('button', {
+            cls: 'lorebase-toolbar-btn lorebase-together-btn',
+            attr: { type: 'button', 'aria-label': label, title: label },
+        });
+        setIcon(btn, 'users');
+        this.addMobileButtonLabel(btn, label);
+        btn.addEventListener('click', () => this.callbacks.onTogether?.());
+        this.togetherBtn = btn;
+        this.syncTogetherVisibility();
+    }
+
+    private syncTogetherVisibility(): void {
+        const supported = this.currentMediaType === 'movie' || this.currentMediaType === 'series' || this.currentMediaType === 'book';
+        if (this.togetherBtn) this.togetherBtn.style.display = supported ? '' : 'none';
+    }
+
+    private selectionActive = false;
+    private selectionBtn: HTMLButtonElement | null = null;
+
+    private renderSelectionButton(parent: HTMLElement): void {
+        if (!this.callbacks.onToggleSelection) return;
+        const label = t('massSelect');
+        const btn = parent.createEl('button', {
+            cls: 'lorebase-toolbar-btn lorebase-select-btn',
+            attr: { type: 'button', 'aria-label': label, 'aria-pressed': String(this.selectionActive) },
+        });
+        setIcon(btn, 'check-square');
+        this.addMobileButtonLabel(btn, label);
+        btn.toggleClass('is-active', this.selectionActive);
+        btn.addEventListener('click', () => this.callbacks.onToggleSelection?.());
+        this.selectionBtn = btn;
+    }
+
+    /** Reflects whether multi-select mode is on. */
+    setSelectionActive(active: boolean): void {
+        this.selectionActive = active;
+        this.selectionBtn?.toggleClass('is-active', active);
+        this.selectionBtn?.setAttr('aria-pressed', String(active));
+    }
+
     private renderRandomButton(parent: HTMLElement): void {
         const randomBtn = parent.createEl('button', {
             cls: 'lorebase-toolbar-btn',
@@ -908,6 +969,7 @@ export class Toolbar {
         const options: Array<{ mode: ViewMode; label: string; icon: string }> = [
             { mode: 'grid', label: t('viewGrid'), icon: 'rectangle-vertical' },
             { mode: 'horizontal', label: t('viewHorizontal'), icon: 'rectangle-horizontal' },
+            { mode: 'table', label: t('viewTable'), icon: 'table' },
         ];
 
         const viewSection = panel.createDiv({ cls: 'lorebase-dropdown-section' });
@@ -934,6 +996,80 @@ export class Toolbar {
                 this.render();
             });
         }
+
+        if (this.callbacks.onCardScaleChange && this.currentViewMode !== 'table') {
+            this.renderCardScaleSlider(panel);
+        }
+        if (this.callbacks.onCardStyleFlagsChange && this.currentViewMode !== 'table') {
+            this.renderCardStyleToggles(panel);
+        }
+        if (this.callbacks.onHiddenCardPartsChange && this.currentViewMode !== 'table') {
+            this.renderHiddenPartsToggles(panel);
+        }
+    }
+
+    /** Quick shortcuts for Hover preview / Progress footer / Title below, per category. */
+    private renderCardStyleToggles(panel: HTMLElement): void {
+        const section = panel.createDiv({ cls: 'lorebase-dropdown-section lorebase-card-parts-section' });
+        const supportsProgressFooter = this.currentMediaType !== 'movie' && this.currentMediaType !== 'game';
+        const entries: Array<{ key: keyof CardStyleFlags; label: string }> = [
+            { key: 'hoverPreview', label: t('settingsCardStyleHover') },
+            ...(supportsProgressFooter ? [{ key: 'progressFooter' as const, label: t('settingsCardStyleProgress') }] : []),
+            { key: 'titleBelow', label: t('settingsCardStyleTitle') },
+        ];
+        for (const entry of entries) {
+            const label = section.createEl('label', { cls: 'lorebase-card-parts-row' });
+            const box = label.createEl('input', { attr: { type: 'checkbox' } });
+            box.checked = Boolean(this.cardStyleFlags[entry.key]);
+            label.createSpan({ text: entry.label });
+            box.addEventListener('change', () => {
+                this.cardStyleFlags = { ...this.cardStyleFlags, [entry.key]: box.checked };
+                this.callbacks.onCardStyleFlagsChange?.({ ...this.cardStyleFlags });
+            });
+        }
+    }
+
+    /** Quick switches to hide the status badge, the rating badge or the "Status for" strip on cards. */
+    private renderHiddenPartsToggles(panel: HTMLElement): void {
+        const section = panel.createDiv({ cls: 'lorebase-dropdown-section lorebase-card-parts-section' });
+        const entries: Array<{ key: keyof HiddenCardParts; label: string }> = [
+            { key: 'status', label: t('cardHideStatus') },
+            { key: 'rating', label: t('cardHideRating') },
+            { key: 'companions', label: t('cardHideCompanions') },
+        ];
+        for (const entry of entries) {
+            const label = section.createEl('label', { cls: 'lorebase-card-parts-row' });
+            const box = label.createEl('input', { attr: { type: 'checkbox' } });
+            box.checked = Boolean(this.hiddenCardParts[entry.key]);
+            label.createSpan({ text: entry.label });
+            box.addEventListener('change', () => {
+                this.hiddenCardParts = { ...this.hiddenCardParts, [entry.key]: box.checked };
+                this.callbacks.onHiddenCardPartsChange?.({ ...this.hiddenCardParts });
+            });
+        }
+    }
+
+    /** Quick poster-size slider; scales width (and height for horizontal cards) without deforming the image. */
+    private renderCardScaleSlider(panel: HTMLElement): void {
+        const section = panel.createDiv({ cls: 'lorebase-dropdown-section lorebase-card-scale-section' });
+        const row = section.createDiv({ cls: 'lorebase-card-scale-row' });
+        const smallIcon = row.createSpan({ cls: 'lorebase-card-scale-icon' });
+        setIcon(smallIcon, 'image');
+        smallIcon.addClass('is-small');
+        const slider = row.createEl('input', {
+            cls: 'lorebase-card-scale-slider',
+            attr: { type: 'range', min: '0.6', max: '1.6', step: '0.05', value: String(this.currentCardScale) },
+        });
+        const bigIcon = row.createSpan({ cls: 'lorebase-card-scale-icon' });
+        setIcon(bigIcon, 'image');
+        bigIcon.addClass('is-large');
+        let debounceHandle: number | null = null;
+        slider.addEventListener('input', () => {
+            const value = Number(slider.value);
+            this.currentCardScale = value;
+            if (debounceHandle !== null) window.clearTimeout(debounceHandle);
+            debounceHandle = window.setTimeout(() => this.callbacks.onCardScaleChange?.(value), 120);
+        });
     }
 
     private renderSettingsControl(parent: HTMLElement): void {
@@ -1045,6 +1181,7 @@ export class Toolbar {
 
     updateMediaContext(mediaType: MediaType, enabledMediaTypes: MediaType[]): void {
         this.currentMediaType = mediaType;
+        this.syncTogetherVisibility();
         this.enabledMediaTypes = [...enabledMediaTypes];
         this.render();
     }

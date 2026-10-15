@@ -193,7 +193,11 @@ type SearchOptions = {
     includeDlc?: boolean;
     page?: number;
     pageSize?: number;
+    language?: string;
 };
+
+/** Remembered for the rest of the session so repeated searches keep the chosen language. */
+let lastMetadataLanguage = '';
 type SearchHandler<T extends SearchItem> = (query: string, providerId?: string, options?: SearchOptions) => Promise<T[]>;
 type ImageFallbackResolver<T extends SearchItem> = (item: T) => Promise<string>;
 
@@ -214,6 +218,8 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
     private manualActionText?: string;
     private onManualAction?: () => void;
     private includeDlcToggleText?: string;
+    private keepPosterToggleText?: string;
+    private keepPoster = false;
     private providerOptions: SearchProviderOption[];
     private activeProviderId?: string;
     private resolve?: (value: T[] | null) => void;
@@ -224,6 +230,9 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
     private currentPage = 1;
     private isReviewing = false;
     private includeDlc = false;
+    private language = lastMetadataLanguage;
+    private languageOptions: Array<{ value: string; label: string }> = [];
+    private languageLabel = '';
     private maxSelection?: number;
     private imageFallbackResolver?: ImageFallbackResolver<T>;
 
@@ -260,6 +269,9 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
             manualActionText?: string;
             onManualAction?: () => void;
             includeDlcToggleText?: string;
+            languageOptions?: Array<{ value: string; label: string }>;
+            languageLabel?: string;
+            keepPosterToggleText?: string;
             initialQuery?: string;
             maxSelection?: number;
             imageFallbackResolver?: ImageFallbackResolver<T>;
@@ -278,11 +290,19 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
         this.manualActionText = options.manualActionText;
         this.onManualAction = options.onManualAction;
         this.includeDlcToggleText = options.includeDlcToggleText;
+        this.languageOptions = options.languageOptions ?? [];
+        this.languageLabel = options.languageLabel ?? '';
+        this.keepPosterToggleText = options.keepPosterToggleText;
         this.providerOptions = options.providerOptions ?? [];
         this.activeProviderId = this.resolveInitialProvider(options.initialProviderId);
         this.currentQuery = options.initialQuery?.trim() ?? '';
         this.maxSelection = options.maxSelection;
         this.imageFallbackResolver = options.imageFallbackResolver;
+    }
+
+    /** Read after openAndGetValues() resolves, when a keep-poster toggle was offered. */
+    getKeepPoster(): boolean {
+        return this.keepPoster;
     }
 
     openAndGetValues(): Promise<T[] | null> {
@@ -566,6 +586,7 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
             query.toLowerCase(),
             this.currentPage,
             this.includeDlc ? 'dlc' : 'base',
+            this.language,
         ].join('|');
         if (this.isLoading && this.activeSearchKey === searchKey) return;
 
@@ -586,6 +607,7 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
                 includeDlc: this.includeDlc,
                 page: this.currentPage,
                 pageSize: SEARCH_PAGE_SIZE,
+                language: this.language || undefined,
             });
         } catch (error) {
             const message = error instanceof Error && error.message ? `: ${error.message}` : '';
@@ -651,8 +673,50 @@ export class MultiSelectSearchModal<T extends SearchItem> extends Modal {
     private renderSearchOptions(): void {
         if (!this.searchOptionsEl) return;
         this.searchOptionsEl.empty();
-        this.searchOptionsEl.toggleClass('is-hidden', !this.includeDlcToggleText || this.activeProviderId !== 'steam');
-        if (!this.includeDlcToggleText || this.activeProviderId !== 'steam') return;
+        const showDlc = Boolean(this.includeDlcToggleText) && this.activeProviderId === 'steam';
+        // TMDB translates titles and plots; Google Books only lists books published in the chosen language.
+        const showLanguage = this.languageOptions.length > 0
+            && (this.activeProviderId === 'tmdb' || this.activeProviderId === 'googlebooks');
+        const showKeepPoster = Boolean(this.keepPosterToggleText);
+        this.searchOptionsEl.toggleClass('is-hidden', !showDlc && !showLanguage && !showKeepPoster);
+
+        if (showLanguage) {
+            const row = this.searchOptionsEl.createDiv({ cls: 'lorebase-select-language' });
+            row.createSpan({ text: this.languageLabel });
+            const select = row.createEl('select', { cls: 'dropdown lorebase-select-language-input' });
+            for (const option of this.languageOptions) {
+                select.createEl('option', { text: option.label, attr: { value: option.value } });
+            }
+            select.value = this.language;
+            select.addEventListener('change', () => {
+                this.language = select.value;
+                lastMetadataLanguage = this.language;
+                this.searchSeq++;
+                this.activeSearchKey = null;
+                this.isLoading = false;
+                this.currentPage = 1;
+                this.items = [];
+                this.focusedIndex = 0;
+                this.lastErrorText = '';
+                this.hasNextPage = false;
+                this.updateSearchButtonState();
+                if (this.inputEl?.value.trim()) {
+                    void this.runSearch();
+                } else {
+                    this.renderGrid();
+                    this.renderPagination();
+                }
+            });
+        }
+        if (showKeepPoster) {
+            const keepLabel = this.searchOptionsEl.createEl('label', { cls: 'lorebase-select-dlc-toggle' });
+            const keepInput = keepLabel.createEl('input', { attr: { type: 'checkbox' } });
+            keepInput.checked = this.keepPoster;
+            keepLabel.createSpan({ text: this.keepPosterToggleText ?? '' });
+            keepInput.addEventListener('change', () => { this.keepPoster = keepInput.checked; });
+        }
+
+        if (!showDlc) return;
 
         const label = this.searchOptionsEl.createEl('label', { cls: 'lorebase-select-dlc-toggle' });
         const input = label.createEl('input', {

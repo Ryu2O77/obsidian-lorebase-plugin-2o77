@@ -4,6 +4,7 @@
  */
 
 import { App, TFile } from 'obsidian';
+import { isResourceUrl, toStoredImagePath } from './media/imagePaths';
 
 export class MetadataService {
     private app: App;
@@ -88,8 +89,12 @@ export class MetadataService {
             // Keep the original text if it is not valid URI-encoded data.
         }
 
-        if (clean.startsWith('app://obsidian.md/')) {
-            clean = clean.slice('app://obsidian.md/'.length);
+        if (isResourceUrl(clean)) {
+            clean = toStoredImagePath(this.app, clean);
+        }
+        // Drop cache-busting suffixes such as "?1790704235998" from local paths (remote URLs keep theirs).
+        if (!/^https?:\/\//i.test(clean)) {
+            clean = clean.replace(/\?[^/]*$/, '');
         }
 
         return clean.replace(/\\/g, '/').replace(/^\/+/, '').trim();

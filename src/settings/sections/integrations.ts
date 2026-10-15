@@ -262,7 +262,8 @@ export function renderIntegrationsSection(context: SettingsSectionContext, conta
     const animeProviders: ProviderSettingsDef[] = [
         { id: 'anilist', label: 'AniList', detailLabel: t('settingsIntegrationsProviderAnilist'), needsKey: false },
         { id: 'jikan', label: 'Jikan', detailLabel: t('settingsIntegrationsProviderJikan'), needsKey: false },
-        { id: 'shikimori', label: 'Shikimori', detailLabel: t('settingsIntegrationsProviderShikimori'), needsKey: false }
+        { id: 'shikimori', label: 'Shikimori', detailLabel: t('settingsIntegrationsProviderShikimori'), needsKey: false },
+        { id: 'tmdb', label: 'TMDB', detailLabel: t('settingsIntegrationsProviderTmdb'), needsKey: true }
     ];
     const bookProviders: ProviderSettingsDef[] = [
         { id: 'hardcover', label: 'Hardcover', detailLabel: t('settingsIntegrationsProviderHardcover'), needsKey: true },

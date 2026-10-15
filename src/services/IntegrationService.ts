@@ -9,6 +9,9 @@ import { t } from '../localization';
 import { ChoiceModal, ExistingFileChoice, ExistingFileChoiceModal, ExistingFilePreview, MultiSelectSearchModal, SearchProviderOption } from '../modals/IntegrationModals';
 import { AnimePartsReviewModal } from '../modals/AnimePartsReviewModal';
 import { AddModeModal, ManualCreateModal, type ManualCreateDraft } from '../modals/ManualCreateModal';
+import { AddExtras, AddOptionsModal, hasAddExtras } from '../modals/AddOptionsModal';
+import { pickBestMatch } from './media/insights';
+import { completeSeriesFrontmatter } from './media/seriesProgress';
 import { AnimeDetails, BookDetails, GameDetails, IntegrationAnimePart, IntegrationMangaPart, IntegrationVideoPart, MangaDetails, MediaEnrichmentPatch, MediaKind, MediaSourceSelection, ProviderId, SearchResult, VideoDetails } from './integrations/types';
 import { buildSimpleTemplate, ensureIntegrationSourceFrontmatter, getDefaultTemplateFields, getEffectiveSimpleTemplateFields, renderTemplate, sanitizeFileName } from './integrations/templateUtils';
 import { getAniListDetails, getAniListMangaDetails, searchAniList, searchAniListManga } from './integrations/providers/anilist';
@@ -23,7 +26,7 @@ import { getShikimoriDetails, getShikimoriMangaDetails, searchShikimori, searchS
 import { getSteamDetails, getSteamDlcForGame, searchSteam } from './integrations/providers/steam';
 import { getSteamGridDbPoster } from './integrations/providers/steamgriddb';
 import { getOmdbDetails, searchOmdb } from './integrations/providers/omdb';
-import { getTmdbDetails, searchTmdb } from './integrations/providers/tmdb';
+import { getTmdbDetails, getTmdbAnimeDetails, searchTmdbAnime, searchTmdb, searchTmdbByDirector } from './integrations/providers/tmdb';
 import { getTvmazeDetails, searchTvmaze } from './integrations/providers/tvmaze';
 import { localizeTemplateImages, saveManualImageFileToVault } from './integrations/imageStorage';
 import type { JsonFetcher } from './integrations/providers/common';
@@ -93,10 +96,56 @@ export class IntegrationService {
         await this.addMedia('manga');
     }
 
+    /**
+     * Non-interactive version of selectMediaSource: searches the configured provider
+     * (then the other enabled ones) and picks the result that best matches the title.
+     * Only returns a source when the match is confident, or when `acceptFirst` is set.
+     */
+    async autoSelectMediaSource(
+        kind: MediaKind,
+        query: string,
+        year: number | null | undefined,
+        acceptFirst: boolean
+    ): Promise<{ source: MediaSourceSelection | null; reason: 'matched' | 'first' | 'review' | 'none'; candidate?: string }> {
+        const integrations = this.getSettings().integrations;
+        if (!integrations?.enabled || !query.trim()) return { source: null, reason: 'none' };
+        const order: ProviderId[] = [];
+        const configured = integrations.media[kind].provider;
+        if (this.isProviderId(configured)) order.push(configured);
+        for (const option of this.getProviderOptions(kind)) {
+            if (this.isProviderId(option.id) && !order.includes(option.id)) order.push(option.id);
+        }
+        let fallback: MediaSourceSelection | null = null;
+        for (const providerId of order) {
+            const providerSettings = integrations.providers[providerId];
+            if (!providerSettings?.enabled || !this.hasRequiredCredentials(providerId, providerSettings)) continue;
+            let results: SearchResult[] = [];
+            try {
+                results = await this.search(
+                    providerId, query, providerSettings.apiKey || '', providerSettings.clientSecret || '',
+                    { pageSize: 10 }, this.toDetailsKind(kind)
+                );
+            } catch {
+                continue;
+            }
+            if (!results.length) continue;
+            const match = pickBestMatch(query, year, results);
+            if (match.candidate && match.confident) {
+                return { source: { ...match.candidate, provider: providerId }, reason: 'matched', candidate: match.candidate.title };
+            }
+            if (!fallback) fallback = { ...results[0], provider: providerId };
+        }
+        if (!fallback) return { source: null, reason: 'none' };
+        return acceptFirst
+            ? { source: fallback, reason: 'first', candidate: fallback.title }
+            : { source: null, reason: 'review', candidate: fallback.title };
+    }
+
     async selectMediaSource(
         kind: MediaKind,
         query: string,
-        preferredProvider?: ProviderId
+        preferredProvider?: ProviderId,
+        isRelink = false
     ): Promise<MediaSourceSelection | null> {
         const settings = this.getSettings();
         const integrations = settings.integrations;
@@ -138,6 +187,9 @@ export class IntegrationService {
                 cancelText: t('commonCancel'),
                 providerOptions,
                 initialProviderId: initialProvider,
+                languageOptions: this.getLanguageOptions(kind),
+                languageLabel: this.getLanguageLabel(kind),
+                keepPosterToggleText: isRelink ? t('promptKeepPoster') : undefined,
                 initialQuery: query,
                 maxSelection: 1,
                 titleIcon: this.getKindIcon(kind),
@@ -146,7 +198,9 @@ export class IntegrationService {
             }
         );
         const selected = await modal.openAndGetValues();
-        return selected?.[0] ?? null;
+        const picked = (selected?.[0] ?? null) as MediaSourceSelection | null;
+        if (picked && isRelink) picked.keepPoster = modal.getKeepPoster();
+        return picked;
     }
 
     async getMediaEnrichment(
@@ -171,7 +225,7 @@ export class IntegrationService {
             providerSettings.apiKey || '',
             providerSettings.clientSecret || '',
             this.toDetailsKind(kind),
-            { includeParts: true }
+            { includeParts: true, language: source.language }
         );
         if (!details) return null;
 
@@ -212,6 +266,7 @@ export class IntegrationService {
             values = {
                 ...sourceIdentity(source),
                 name: built.name,
+                original_title: built.originalTitle,
                 poster: built.image,
                 poster_b: built.ImageHorizontal,
                 plot: built.Plot,
@@ -229,6 +284,7 @@ export class IntegrationService {
             values = {
                 ...sourceIdentity(source),
                 name: built.name,
+                original_title: built.originalTitle,
                 poster: built.Poster,
                 poster_b: built.PosterHorizontal,
                 plot: built.Plot,
@@ -273,6 +329,7 @@ export class IntegrationService {
             values = {
                 ...sourceIdentity(source),
                 name: built.name,
+                original_title: built.originalTitle,
                 poster: built.Poster,
                 poster_b: built.PosterHorizontal,
                 plot: built.Plot,
@@ -412,6 +469,8 @@ export class IntegrationService {
 
             const selected = await this.chooseResults(kind, initialProvider, providerOptions, allowManualFallback);
             if (!selected.length) return;
+            const extras = await new AddOptionsModal(this.app, kind).openAndGetValue();
+            if (!extras) return;
 
             const template = this.getTemplate(
                 kind,
@@ -453,7 +512,7 @@ export class IntegrationService {
                             providerSettings.apiKey || '',
                             providerSettings.clientSecret || '',
                             this.toDetailsKind(kind),
-                            { includeParts: kind !== 'anime' }
+                            { includeParts: kind !== 'anime', language: item.language }
                         );
                         if (!details) {
                             new Notice(t('noticeNoResults'));
@@ -560,7 +619,9 @@ export class IntegrationService {
                         }
 
                         await ensureFolder(this.app, folderPath);
-                        await this.app.vault.create(pathChoice.fullPath, content);
+                        const createdFile = await this.app.vault.create(pathChoice.fullPath, content);
+                        await this.applyAddExtras(createdFile, extras);
+                        await this.applyOriginalTitle(createdFile, values.originalTitle);
                         reservedPaths.add(pathChoice.fullPath);
                         new Notice(t('noticeCreated'));
                         continue itemLoop;
@@ -598,6 +659,8 @@ export class IntegrationService {
                     mediaSettings.howLongToBeatEnabled ?? false
                 )
                 : buildSimpleTemplate(kind, getDefaultTemplateFields(kind));
+            const manualExtras = await new AddOptionsModal(this.app, kind).openAndGetValue();
+            if (!manualExtras) return;
             const values = this.buildManualValues(preparedDraft);
             const title = this.firstStringValue(values, 'name', preparedDraft.title, 'Untitled');
             const renderedValues = template && integrations
@@ -640,6 +703,7 @@ export class IntegrationService {
                 file = await this.app.vault.create(pathChoice.fullPath, content);
             }
 
+            if (file) await this.applyAddExtras(file, manualExtras);
             new Notice(t('noticeCreated'));
             if (file) {
                 await this.app.workspace.getLeaf(true).openFile(file);
@@ -648,6 +712,39 @@ export class IntegrationService {
             console.error('Manual add error:', error);
             const message = error instanceof Error ? `: ${error.message}` : '';
             new Notice(`${t('noticeIntegrationsError')}${message}`);
+        }
+    }
+
+    /** Stores the provider's original title (shown small in the editor, not on the card). */
+    private async applyOriginalTitle(file: TFile, originalTitle: unknown): Promise<void> {
+        const text = typeof originalTitle === 'string' ? originalTitle.trim() : '';
+        if (!text) return;
+        try {
+            await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+                frontmatter.original_title = text;
+            });
+        } catch (error: unknown) {
+            console.error('Lorebase: could not store original title', error);
+        }
+    }
+
+    /** Applies the "add as completed / watched with / franchise" choices to a freshly created note. */
+    private async applyAddExtras(file: TFile, extras: AddExtras): Promise<void> {
+        if (!hasAddExtras(extras)) return;
+        try {
+            await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+                if (extras.completed) {
+                    frontmatter.status = 'completed';
+                    frontmatter.finished = extras.finishedDate;
+                    if (frontmatter.type === 'series' || Array.isArray(frontmatter.series_parts)) {
+                        completeSeriesFrontmatter(frontmatter);
+                    }
+                }
+                if (extras.watchedWith.length) frontmatter.watched_with = extras.watchedWith;
+                if (extras.franchise.length) frontmatter.franchise = extras.franchise;
+            });
+        } catch (error: unknown) {
+            console.error('Lorebase: could not apply add options', error);
         }
     }
 
@@ -942,6 +1039,8 @@ export class IntegrationService {
                 cancelText: t('commonCancel'),
                 providerOptions,
                 initialProviderId,
+                languageOptions: this.getLanguageOptions(kind),
+                languageLabel: this.getLanguageLabel(kind),
                 titleIcon: kind === 'games'
                     ? 'gamepad-2'
                     : kind === 'anime'
@@ -994,6 +1093,30 @@ export class IntegrationService {
         return true;
     }
 
+    /** TMDB can return titles and plots in many languages; offered for movies, series and anime. */
+    private getLanguageLabel(kind: MediaKind): string {
+        return kind === 'books' ? t('bookLanguage') : t('metadataLanguage');
+    }
+
+    private getLanguageOptions(kind: MediaKind): Array<{ value: string; label: string }> {
+        if (kind !== 'movies' && kind !== 'series' && kind !== 'anime' && kind !== 'books') return [];
+        return [
+            { value: '', label: kind === 'books' ? t('bookLanguageAny') : t('metadataLanguageDefault') },
+            { value: 'es-ES', label: 'Espa\u00F1ol (Espa\u00F1a)' },
+            { value: 'es-MX', label: 'Espa\u00F1ol (Latinoam\u00E9rica)' },
+            { value: 'en-US', label: 'English' },
+            { value: 'pt-BR', label: 'Portugu\u00EAs (Brasil)' },
+            { value: 'fr-FR', label: 'Fran\u00E7ais' },
+            { value: 'de-DE', label: 'Deutsch' },
+            { value: 'it-IT', label: 'Italiano' },
+            { value: 'ja-JP', label: '\u65E5\u672C\u8A9E' },
+            { value: 'ko-KR', label: '\uD55C\uAD6D\uC5B4' },
+            { value: 'zh-CN', label: '\u4E2D\u6587' },
+            { value: 'ru-RU', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439' },
+            { value: 'uk-UA', label: '\u0423\u043A\u0440\u0430\u0457\u043D\u0441\u044C\u043A\u0430' },
+        ];
+    }
+
     private getProviderOptions(kind: MediaKind): SearchProviderOption[] {
         const providers: Array<{ id: ProviderId; label: string }> = kind === 'games'
             ? [
@@ -1006,6 +1129,7 @@ export class IntegrationService {
                 { id: 'anilist', label: 'AniList' },
                 { id: 'jikan', label: 'Jikan' },
                 { id: 'shikimori', label: 'Shikimori' },
+                { id: 'tmdb', label: 'TMDB' },
                 ]
                 : kind === 'movies'
                     ? [
@@ -1105,13 +1229,14 @@ export class IntegrationService {
         query: string,
         apiKey: string,
         clientSecret = '',
-        options: { includeDlc?: boolean; page?: number; pageSize?: number } = {},
+        options: { includeDlc?: boolean; page?: number; pageSize?: number; language?: string } = {},
         kind?: 'movies' | 'series' | 'books' | 'manga'
     ): Promise<SearchResult[]> {
         const cacheKey = [
             provider,
             kind ?? '',
             query.trim().toLowerCase(),
+            options.language ?? '',
             options.includeDlc ? 'dlc' : 'base',
             options.page ?? 1,
             options.pageSize ?? 10,
@@ -1183,6 +1308,7 @@ export class IntegrationService {
                 results = await searchGoogleBooks(fetchJson, query, apiKey, {
                     page: options.page,
                     pageSize: options.pageSize,
+                    language: options.language,
                 });
                 break;
             case 'mangaupdates':
@@ -1198,11 +1324,24 @@ export class IntegrationService {
                 });
                 break;
             case 'tmdb':
-                results = await searchTmdb(fetchJson, query, apiKey, {
-                    kind: this.toVideoKind(kind),
-                    page: options.page,
-                    pageSize: options.pageSize,
-                });
+                if (kind === undefined) {
+                    // anime library: TMDB lists anime as TV series and movies
+                    results = await searchTmdbAnime(fetchJson, query, apiKey, {
+                        page: options.page,
+                        pageSize: options.pageSize,
+                        language: options.language,
+                    });
+                    break;
+                }
+                {
+                    const videoKind = this.toVideoKind(kind);
+                    const [titleResults, directorResults] = await Promise.all([
+                        searchTmdb(fetchJson, query, apiKey, { kind: videoKind, page: options.page, pageSize: options.pageSize, language: options.language }),
+                        searchTmdbByDirector(fetchJson, query, apiKey, { kind: videoKind, pageSize: options.pageSize, language: options.language }),
+                    ]);
+                    const seenIds = new Set(titleResults.map((entry) => entry.id));
+                    results = [...titleResults, ...directorResults.filter((entry) => !seenIds.has(entry.id))];
+                }
                 break;
             case 'tvmaze':
                 results = await searchTvmaze(fetchJson, query, apiKey, {
@@ -1222,6 +1361,9 @@ export class IntegrationService {
                 results = [];
         }
 
+        if (provider === 'tmdb' && options.language) {
+            results = results.map((result) => ({ ...result, language: options.language }));
+        }
         const cacheTtlMs = provider === 'mangaupdates' ? 20 * 60_000 : 60_000;
         this.searchCache.set(cacheKey, { expiresAt: Date.now() + cacheTtlMs, results });
         if (this.searchCache.size > 80) {
@@ -1241,7 +1383,7 @@ export class IntegrationService {
         apiKey: string,
         clientSecret = '',
         kind?: 'movies' | 'series' | 'books' | 'manga',
-        options: { includeParts?: boolean } = {}
+        options: { includeParts?: boolean; language?: string } = {}
     ): Promise<GameDetails | AnimeDetails | VideoDetails | BookDetails | MangaDetails | null> {
         const fetchJson = this.jsonFetcher;
         switch (provider) {
@@ -1272,7 +1414,8 @@ export class IntegrationService {
             case 'mangadex':
                 return getMangaDexDetails(fetchJson, id);
             case 'tmdb':
-                return getTmdbDetails(fetchJson, id, apiKey, this.toVideoKind(kind));
+                if (kind === undefined) return getTmdbAnimeDetails(fetchJson, id, apiKey, options.language);
+                return getTmdbDetails(fetchJson, id, apiKey, this.toVideoKind(kind), options.language);
             case 'tvmaze':
                 return getTvmazeDetails(fetchJson, id, apiKey, this.toVideoKind(kind));
             case 'omdb':
@@ -1566,6 +1709,7 @@ export class IntegrationService {
         const activePart = parts.find((part) => part.id === source?.activePartId) ?? parts[0] ?? null;
         return {
             name: details.name,
+            originalTitle: details.originalTitle ?? '',
             image: details.image,
             ImageHorizontal: details.imageHorizontal ?? details.image,
             Plot: details.description,
@@ -1602,6 +1746,7 @@ export class IntegrationService {
         const actors = this.normalizeDisplayList(details.actors);
         return {
             name: details.name,
+            originalTitle: details.originalTitle ?? '',
             Poster: details.poster,
             PosterHorizontal: details.posterHorizontal || details.poster,
             Plot: details.description,
@@ -1676,6 +1821,7 @@ export class IntegrationService {
         const activePart = (source?.activePartId ? parts.find((part) => part.id === source.activePartId) : null) ?? parts[0] ?? null;
         return {
             name: details.name,
+            originalTitle: details.originalTitle ?? '',
             Poster: details.poster,
             PosterHorizontal: details.posterHorizontal || details.poster,
             Plot: details.description,

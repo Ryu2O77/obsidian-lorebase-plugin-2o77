@@ -10,10 +10,14 @@ export interface SearchResult extends SearchItem {
     image?: string;
     year?: string;
     format?: string;
+    /** Metadata language chosen when searching (TMDB), reused when loading details */
+    language?: string;
 }
 
 export interface MediaSourceSelection extends SearchResult {
     provider: ProviderId;
+    /** When relinking, keep the note's current poster instead of taking the new source's */
+    keepPoster?: boolean;
 }
 
 export interface MediaEnrichmentPatch {
@@ -58,6 +62,7 @@ export interface AnimeDetails {
     parts?: IntegrationAnimePart[];
     communityRating?: string;
     communityVotes?: string;
+    originalTitle?: string;
 }
 
 export interface VideoDetails {
@@ -82,6 +87,7 @@ export interface VideoDetails {
     parts?: IntegrationVideoPart[];
     communityRating?: string;
     communityVotes?: string;
+    originalTitle?: string;
 }
 
 export interface BookDetails {
@@ -120,6 +126,7 @@ export interface MangaDetails {
     parts?: IntegrationMangaPart[];
     communityRating?: string;
     communityVotes?: string;
+    originalTitle?: string;
 }
 
 export interface IntegrationAnimePart {

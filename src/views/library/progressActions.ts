@@ -1,5 +1,7 @@
-import { AnimeItem, MangaItem } from '../../types';
+import { AnimeItem, BookItem, MangaItem } from '../../types';
 import { stepProgress } from '../../utils/progress';
+import { completeMangaParts } from '../../services/media/progressComplete';
+import { completePartsProgress } from '../../services/media/seriesProgress';
 
 export interface ProgressMutation<T> {
     updates: Partial<T>;
@@ -104,4 +106,84 @@ export function incrementMangaChapter(item: MangaItem): ProgressMutation<MangaIt
 
 function normalizeCount(value: number | null | undefined): number | null {
     return Number.isFinite(value) ? Math.max(0, Math.trunc(value as number)) : null;
+}
+
+function todayInput(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** Marks every episode of every season/part as watched and the title as completed. */
+export function completeAllAnime(item: AnimeItem): ProgressMutation<AnimeItem> {
+    const parts = completePartsProgress((item.parts ?? []).map((part) => ({ ...part })));
+    const active = parts.find((part) => part.id === item.activePartId) ?? parts[0] ?? null;
+    const total = normalizeCount(active?.episodeTotal ?? item.episodeTotal);
+    const episodeCurrent = active?.episodeCurrent ?? (total ? total : item.episodeCurrent);
+    const updates: Partial<AnimeItem> = { status: 'completed', episodeCurrent };
+    const changedFields = new Set<string>(['status', 'episodeCurrent']);
+    item.status = 'completed';
+    item.episodeCurrent = episodeCurrent;
+    if (parts.length) {
+        item.parts = parts;
+        updates.parts = parts;
+        changedFields.add('parts');
+    }
+    if (!item.finished) {
+        item.finished = todayInput();
+        updates.finished = item.finished;
+        changedFields.add('finished');
+    }
+    return { updates, changedFields: Array.from(changedFields) };
+}
+
+/** Marks every chapter of every volume as read and the manga as completed. */
+export function completeAllManga(item: MangaItem): ProgressMutation<MangaItem> {
+    const parts = completeMangaParts((item.parts ?? []).map((part) => ({ ...part })));
+    const active = parts.find((part) => part.id === item.activePartId) ?? parts[0] ?? null;
+    const total = normalizeCount(active?.chapterTotal ?? item.chapterTotal);
+    const chapterCurrent = active?.chapterCurrent ?? (total ? total : item.chapterCurrent);
+    const updates: Partial<MangaItem> = { status: 'completed', chapterCurrent };
+    const changedFields = new Set<string>(['status', 'chapterCurrent']);
+    item.status = 'completed';
+    item.chapterCurrent = chapterCurrent;
+    if (parts.length) {
+        item.parts = parts;
+        updates.parts = parts;
+        changedFields.add('parts');
+    } else if (item.volumeTotal && item.volumeTotal > 0) {
+        item.volumeCurrent = item.volumeTotal;
+        updates.volumeCurrent = item.volumeTotal;
+        changedFields.add('volumeCurrent');
+    }
+    if (!item.finished) {
+        item.finished = todayInput();
+        updates.finished = item.finished;
+        changedFields.add('finished');
+    }
+    return { updates, changedFields: Array.from(changedFields) };
+}
+
+/** Marks a book as fully read: pages and chapters go to their totals when those are known. */
+export function completeAllBook(item: BookItem): ProgressMutation<BookItem> {
+    const updates: Partial<BookItem> = { status: 'completed' };
+    const changedFields = new Set<string>(['status']);
+    item.status = 'completed';
+    const pageTotal = normalizeCount(item.pageTotal);
+    if (pageTotal) {
+        item.pageCurrent = pageTotal;
+        updates.pageCurrent = pageTotal;
+        changedFields.add('pageCurrent');
+    }
+    const chapterTotal = normalizeCount(item.chapterTotal);
+    if (chapterTotal) {
+        item.chapterCurrent = chapterTotal;
+        updates.chapterCurrent = chapterTotal;
+        changedFields.add('chapterCurrent');
+    }
+    if (!item.finished) {
+        item.finished = todayInput();
+        updates.finished = item.finished;
+        changedFields.add('finished');
+    }
+    return { updates, changedFields: Array.from(changedFields) };
 }

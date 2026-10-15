@@ -1,7 +1,10 @@
 import { App, Menu, Modal, setIcon, TFile } from 'obsidian';
 import { DEFAULT_COVER, STATUS_CONFIG } from '../constants';
 import { i18n, t } from '../localization';
-import { BookItem, MangaItem, MangaPart, ReadingItem, ReadingStatus, RelatedMediaLink, UserRating } from '../types';
+import { CompanionsEditor } from './CompanionsEditor';
+import { paintStars, starValueFromClick } from './halfStars';
+import { collectVaultNames, FRANCHISE_KEYS, PLATFORM_KEYS, WATCHED_WITH_KEYS } from '../services/media/people';
+import { BookItem, Companion, MangaItem, MangaPart, ReadingItem, ReadingStatus, RelatedMediaLink, UserRating } from '../types';
 import { GenreEditModal } from './GenreEditModal';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
@@ -11,6 +14,9 @@ import { extractMarkdownSection } from '../services/markdownSections';
 import { RelatedMediaEditor } from './RelatedMediaEditor';
 import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
 import { normalizeProgress, stepProgress } from '../utils/progress';
+import { mountPosterEditor, getPosterFolder } from './posterEditor';
+import { completeMangaParts } from '../services/media/progressComplete';
+import { getCompanionStatusLabels } from '../views/library/companionLabels';
 
 type ReadingUpdates = Partial<ReadingItem> & Record<string, unknown>;
 type NotesMode = 'description' | 'myNotes';
@@ -32,6 +38,9 @@ export class ReadingEditModal extends Modal {
     private title: string;
     private poster: string;
     private horizontalPoster: string;
+    /** Vault path chosen in the editor; null while the image is untouched */
+    private posterStored: string | null = null;
+    private horizontalStored: string | null = null;
     private year: number | null;
     private selectedStatus: ReadingStatus;
     private selectedRating: UserRating;
@@ -46,6 +55,10 @@ export class ReadingEditModal extends Modal {
     private sourceUrl: string;
     private genres: string[];
     private tags: string[];
+    private watchedWith: string[];
+    private companions: Companion[];
+    private franchise: string[];
+    private companionsEditor?: CompanionsEditor;
     private authors: string[];
     private publisher: string;
     private releaseDate: string;
@@ -108,6 +121,9 @@ export class ReadingEditModal extends Modal {
         this.sourceUrl = item.sourceUrl ?? '';
         this.genres = this.normalizeList(item.genres);
         this.tags = this.normalizeList(item.tags);
+        this.watchedWith = [...(item.watchedWith ?? [])];
+        this.companions = (item.companions ?? []).map((entry) => ({ ...entry }));
+        this.franchise = [...(item.franchise ?? [])];
         this.authors = this.normalizeList(item.authors);
         this.publisher = item.type === 'book' ? item.publisher ?? '' : '';
         this.releaseDate = item.type === 'book' ? this.normalizeDateInput(item.releaseDate) : '';
@@ -127,7 +143,9 @@ export class ReadingEditModal extends Modal {
             item.filePath,
             item.relatedMedia ?? [],
             relatedCandidates,
-            incomingRelated
+            incomingRelated,
+            null,
+            item.franchise ?? []
         );
     }
 
@@ -155,6 +173,7 @@ export class ReadingEditModal extends Modal {
         this.relatedMediaEditor.bind(root);
         this.renderGenreChips(root);
         this.renderTagChips(root);
+        this.mountCompanions(root);
         this.updateDates(root);
         this.updateCharCount(root);
         this.updateNotesDisclosureUI(root);
@@ -240,6 +259,7 @@ export class ReadingEditModal extends Modal {
                             <div class="lorebase-editmode-title-row">
                                 <input class="lorebase-editmode-title-input" data-field="title" type="text" aria-label="${t('templateFieldName')}" />
                             </div>
+                            <div class="lorebase-editmode-original-title" data-role="original-title"></div>
                             <div class="lorebase-editmode-meta-row">
                                 <label class="lorebase-editmode-field">
                                     <span class="lorebase-editmode-field-label">${t('year')}</span>
@@ -296,11 +316,11 @@ export class ReadingEditModal extends Modal {
                                     <span class="lorebase-editmode-rating-caption">${t('editPersonalRating')}</span>
                                     <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-ghost lorebase-editmode-btn-tight" data-action="clear-rating">${t('editClear')}</button>
                                 </div>
-                                <div class="lorebase-editmode-stars" data-role="stars"></div>
-                                <div class="lorebase-editmode-rating-meta">
+                                <div class="lorebase-editmode-rating-body">
+                                    <div class="lorebase-editmode-stars" data-role="stars"></div>
                                     <span class="lorebase-editmode-rating-value" data-role="rating-value">0.0 / 5.0</span>
-                                    <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 </div>
+                                <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 <div class="lorebase-editmode-rating-line"><span class="lorebase-editmode-rating-line-fill" data-role="rating-line"></span></div>
                             </div>
                             <div class="lorebase-editmode-play-dates">
@@ -332,6 +352,7 @@ export class ReadingEditModal extends Modal {
                                 <h3 class="lorebase-editmode-panel-title">${t('editRelatedMedia')}</h3>
                                 <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-tight" data-action="add-related">${t('editAddRelated')}</button>
                             </div>
+                            <div class="lorebase-editmode-related-suggestions" data-role="related-suggestions"></div>
                             <div class="lorebase-editmode-related-list" data-role="related-media"></div>
                         </section>
                     </main>
@@ -365,6 +386,8 @@ export class ReadingEditModal extends Modal {
                             <div class="lorebase-editmode-chip-row" data-role="tag-chips"></div>
                             <input class="lorebase-editmode-input lorebase-editmode-tag-input" type="text" data-field="new-tag" placeholder="${t('editTagPlaceholder')}" />
                         </section>
+
+                        <section class="lorebase-editmode-panel lorebase-editmode-companions" data-role="companions-panel"></section>
 
                         <section class="lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-timestamps">
                             <div class="lorebase-editmode-panel-title-row"><h3 class="lorebase-editmode-panel-title">${t('editDates')}</h3></div>
@@ -433,12 +456,34 @@ export class ReadingEditModal extends Modal {
 
     private bindFields(root: HTMLElement): void {
         this.setInput(root, '[data-field="title"]', this.title);
+        const originalEl = this.qs<HTMLElement>(root, '[data-role="original-title"]');
+        if (originalEl) {
+            const original = this.item.originalTitle?.trim() ?? '';
+            const show = Boolean(original) && original.toLocaleLowerCase() !== this.item.displayName.trim().toLocaleLowerCase();
+            originalEl.toggleClass('is-hidden', !show);
+            if (show) originalEl.setText(`${t('originalTitleLabel')}: ${original}`);
+        }
         this.setInput(root, '[data-field="year"]', this.year);
         this.setInput(root, '[data-field="summary"]', this.getCurrentNotesValue());
         this.setInput(root, '[data-field="started-date"]', this.started);
         this.setInput(root, '[data-field="finished-date"]', this.finished);
         this.setInput(root, '[data-field="authors"]', this.authors.join(', '));
         this.qs<HTMLImageElement>(root, '[data-role="poster"]')?.setAttr('src', this.poster || DEFAULT_COVER);
+        const poster = this.qs<HTMLImageElement>(root, '[data-role="poster"]');
+        const posterCard = poster?.closest<HTMLElement>('.lorebase-editmode-poster-card');
+        if (posterCard && !posterCard.querySelector('.lorebase-poster-editor')) {
+            mountPosterEditor(posterCard, {
+                app: this.app,
+                kind: this.item.type === 'book' ? 'books' : 'manga',
+                getTitle: () => this.title,
+                getFolder: () => getPosterFolder(this.app),
+                supportsHorizontal: true,
+                getDisplay: (target) => target === 'horizontal' ? this.horizontalPoster : this.poster,
+                onChange: (target, change) => {
+                    if (target === 'horizontal') { this.horizontalPoster = change.display; this.horizontalStored = change.stored; } else { this.poster = change.display; this.posterStored = change.stored; }
+                },
+            });
+        }
 
         if (this.item.type === 'book') {
             this.setInput(root, '[data-field="publisher"]', this.publisher);
@@ -593,6 +638,7 @@ export class ReadingEditModal extends Modal {
                 this.bookChapterTotal = value;
                 this.syncProgressView(root);
             });
+            this.addCompleteAllButton(root, editor);
             return;
         }
 
@@ -623,6 +669,42 @@ export class ReadingEditModal extends Modal {
         this.createNumberEditor(editor, t('editVolumeTotal'), this.volumeTotal, (value) => {
             this.volumeTotal = value;
             this.syncProgressView(root);
+        });        this.addCompleteAllButton(root, editor);
+    }
+
+    /** Fills the progress to its totals (book: pages + chapters, manga: every volume's chapters). */
+    private completeAllProgress(root: HTMLElement): void {
+        if (this.item.type === 'book') {
+            if (this.pageTotal) this.pageCurrent = this.pageTotal;
+            if (this.bookChapterTotal) this.bookChapterCurrent = this.bookChapterTotal;
+        } else {
+            if (this.parts.length) {
+                this.parts = completeMangaParts(this.parts);
+                const active = this.getActivePart();
+                if (active?.chapterCurrent !== null && active?.chapterCurrent !== undefined) this.chapterCurrent = active.chapterCurrent;
+            } else if (this.chapterTotal) {
+                this.chapterCurrent = this.chapterTotal;
+            }
+            if (!this.parts.length && this.volumeTotal) this.volumeCurrent = this.volumeTotal;
+        }
+        this.renderProgress(root);
+    }
+
+    private addCompleteAllButton(root: HTMLElement, editor: HTMLElement): void {
+        const label = this.item.type === 'book' ? t('bookCompleteAll') : t('mangaCompleteAll');
+        const button = editor.createEl('button', {
+            cls: 'lorebase-btn lorebase-complete-all',
+            text: `\u2713 ${label}`,
+            attr: { type: 'button' },
+        });
+        button.addEventListener('click', () => {
+            this.completeAllProgress(root);
+            this.selectedStatus = 'completed';
+            if (!this.finished) {
+                this.finished = this.getTodayDateInput();
+                this.finishedDatePicker?.syncInput(this.finished);
+            }
+            this.updateStatusUI(root);
         });
     }
 
@@ -712,6 +794,7 @@ export class ReadingEditModal extends Modal {
                     this.finished = this.getTodayDateInput();
                     this.finishedDatePicker?.syncInput(this.finished);
                 }
+                if (option.status === 'completed') this.completeAllProgress(root);
                 this.updateStatusUI(root);
             });
             host.appendChild(button);
@@ -731,8 +814,9 @@ export class ReadingEditModal extends Modal {
                 attr: { type: 'button', 'data-rating': String(value), 'aria-label': `${t('editRating')} ${value}` },
             });
             button.dataset.rating = String(value);
-            button.addEventListener('click', () => {
-                this.selectedRating = this.selectedRating === value ? null : value;
+            button.addEventListener('click', (event) => {
+                const picked = starValueFromClick(button, value, event);
+                this.selectedRating = this.selectedRating === picked ? null : picked;
                 this.updateRatingUI(root);
             });
         }
@@ -768,6 +852,25 @@ export class ReadingEditModal extends Modal {
                 this.genres = this.normalizeList(values);
                 this.renderGenreChips(root);
             }).open();
+        });
+    }
+
+    private mountCompanions(root: HTMLElement): void {
+        const host = root.querySelector<HTMLElement>('[data-role="companions-panel"]');
+        if (!host) return;
+        const isBook = this.item.type === 'book';
+        this.companionsEditor = new CompanionsEditor(host, {
+            showWatchedWith: true,
+            showFranchise: isBook,
+            showPlatforms: true,
+            platforms: this.item.platforms ?? [],
+            platformSuggestions: collectVaultNames(this.app, PLATFORM_KEYS),
+            watchedWith: this.watchedWith,
+            companions: this.companions,
+            franchise: this.franchise,
+            nameSuggestions: collectVaultNames(this.app, WATCHED_WITH_KEYS),
+            franchiseSuggestions: isBook ? collectVaultNames(this.app, FRANCHISE_KEYS) : [],
+            statusLabels: getCompanionStatusLabels(this.item.type),
         });
     }
 
@@ -813,10 +916,7 @@ export class ReadingEditModal extends Modal {
     }
 
     private updateRatingUI(root: HTMLElement): void {
-        root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            const value = Number(btn.dataset.rating ?? '0');
-            btn.toggleClass('is-active', this.selectedRating !== null && value <= this.selectedRating);
-        });
+        paintStars(root, this.selectedRating);
         const numeric = this.selectedRating ?? 0;
         this.setText(root, '[data-role="rating-value"]', `${numeric.toFixed(1)} / 5.0`);
         const line = this.qs<HTMLElement>(root, '[data-role="rating-line"]');
@@ -941,8 +1041,8 @@ export class ReadingEditModal extends Modal {
         if (!validateDatePickers([this.startedDatePicker, this.finishedDatePicker, this.releaseDatePicker].filter((picker): picker is HierarchicalDatePicker => Boolean(picker)))) return false;
         const updates: ReadingUpdates = {
             displayName: this.title.trim() || this.item.displayName,
-            imageUrl: this.poster === DEFAULT_COVER ? '' : this.poster,
-            horizontalImageUrl: this.horizontalPoster,
+            ...(this.posterStored !== null ? { imageUrl: this.posterStored } : {}),
+            ...(this.horizontalStored !== null ? { horizontalImageUrl: this.horizontalStored } : {}),
             year: this.year,
             summary: this.summary,
             status: this.selectedStatus,
@@ -957,6 +1057,13 @@ export class ReadingEditModal extends Modal {
             relatedMedia: this.relatedMediaEditor.getValue(),
             myNotes: this.myNotes,
         };
+        const shared = this.companionsEditor?.getValue();
+        if (shared) {
+            updates.watchedWith = shared.watchedWith;
+            updates.platforms = shared.platforms;
+            updates.companions = shared.companions;
+            if (this.item.type === 'book') updates.franchise = shared.franchise;
+        }
 
         if (this.item.type === 'book') {
             Object.assign(updates, {

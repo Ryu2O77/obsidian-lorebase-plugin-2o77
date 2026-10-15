@@ -4,7 +4,8 @@
  */
 
 import { Modal, App } from 'obsidian';
-import { GameStats, AnimeStats, MediaType } from '../types';
+import { GameStats, AnimeStats, MediaItem, MediaType } from '../types';
+import { completedPerMonth, computeCompanionStats } from '../services/media/insights';
 import { t } from '../localization';
 import { RATING_CONFIG } from '../constants';
 
@@ -18,11 +19,13 @@ import { RATING_CONFIG } from '../constants';
 export class StatsModal extends Modal {
     private stats: GameStats | AnimeStats;
     private mediaType: MediaType;
+    private items: MediaItem[];
 
-    constructor(app: App, stats: GameStats | AnimeStats, mediaType: MediaType) {
+    constructor(app: App, stats: GameStats | AnimeStats, mediaType: MediaType, items: MediaItem[] = []) {
         super(app);
         this.stats = stats;
         this.mediaType = mediaType;
+        this.items = items;
     }
 
     onOpen(): void {
@@ -51,6 +54,9 @@ export class StatsModal extends Modal {
 
         // Rating distribution
         this.renderRatingDistribution(contentEl);
+
+        this.renderMonthly(contentEl);
+        this.renderTogether(contentEl);
 
         // Additional info (games only)
         if (this.mediaType === 'game') {
@@ -197,6 +203,55 @@ export class StatsModal extends Modal {
     /**
      * Render rating distribution section
      */
+    /** Bar chart of items completed in each of the last 12 months. */
+    private renderMonthly(container: HTMLElement): void {
+        const buckets = completedPerMonth(this.items, 12);
+        const max = Math.max(...buckets.map((bucket) => bucket.count));
+        if (max <= 0) return;
+        const section = container.createDiv({ cls: 'lorebase-stats-section' });
+        const title = section.createDiv({ cls: 'lorebase-stats-section-title' });
+        title.createSpan({ text: '\u{1F4C5}' });
+        title.createSpan({ text: t('statsMonthlyTitle') });
+        const chart = section.createDiv({ cls: 'lorebase-stats-months' });
+        for (const bucket of buckets) {
+            const col = chart.createDiv({ cls: 'lorebase-stats-month', attr: { title: `${bucket.key}: ${bucket.count}` } });
+            col.createDiv({ cls: 'lorebase-stats-month-count', text: bucket.count ? String(bucket.count) : '' });
+            const bar = col.createDiv({ cls: 'lorebase-stats-month-bar' });
+            bar.style.height = `${Math.max(bucket.count ? 6 : 2, Math.round((bucket.count / max) * 80))}px`;
+            col.createDiv({ cls: 'lorebase-stats-month-label', text: String(bucket.month).padStart(2, '0') });
+        }
+    }
+
+    /** Comparison with each person the collection is shared with. */
+    private renderTogether(container: HTMLElement): void {
+        if (this.mediaType !== 'movie' && this.mediaType !== 'series' && this.mediaType !== 'book') return;
+        for (const person of computeCompanionStats(this.items)) {
+            const section = container.createDiv({ cls: 'lorebase-stats-section' });
+            const title = section.createDiv({ cls: 'lorebase-stats-section-title' });
+            title.createSpan({ text: '\u{1F465}' });
+            title.createSpan({ text: `${t('statsTogetherTitle')} ${person.name}` });
+            const grid = section.createDiv({ cls: 'lorebase-stats-together-grid' });
+            const cell = (label: string, value: string): void => {
+                const card = grid.createDiv({ cls: 'lorebase-stats-together-card' });
+                card.createDiv({ cls: 'lorebase-stats-together-value', text: value });
+                card.createDiv({ cls: 'lorebase-stats-together-label', text: label });
+            };
+            cell(t('statsShared'), String(person.shared));
+            cell(t('statsBothCompleted'), String(person.bothCompleted));
+            cell(t('statsAvgMine'), person.avgMine === null ? '-' : `${person.avgMine} \u2605`);
+            cell(t('statsAvgTheirs'), person.avgTheirs === null ? '-' : `${person.avgTheirs} \u2605`);
+            if (person.disagreements.length) {
+                section.createDiv({ cls: 'lorebase-stats-together-subtitle', text: t('statsDisagreeTitle') });
+                const list = section.createDiv({ cls: 'lorebase-stats-disagreements' });
+                for (const entry of person.disagreements) {
+                    const row = list.createDiv({ cls: 'lorebase-stats-disagreement' });
+                    row.createSpan({ cls: 'lorebase-stats-disagreement-name', text: entry.name });
+                    row.createSpan({ cls: 'lorebase-stats-disagreement-values', text: `${t('statsYou')} ${entry.mine} \u00B7 ${person.name} ${entry.theirs}` });
+                }
+            }
+        }
+    }
+
     private renderRatingDistribution(container: HTMLElement): void {
         const section = container.createDiv({ cls: 'lorebase-stats-section' });
 

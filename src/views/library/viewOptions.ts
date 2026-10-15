@@ -102,6 +102,20 @@ export function getBuiltInFieldDefinitions(
             operators: ['thisMonth', 'thisYear', 'between', 'equals', 'greater', 'less', 'empty', 'notEmpty'],
         },
     ];
+    {
+        const watchedWithLabel = language === 'ru' || language === 'uk' ? 'Статус для' : 'Status for';
+        definitions.splice(2, 0, {
+            id: 'watchedWith', label: watchedWithLabel, icon: 'users', type: 'list', source: 'builtin',
+            operators: ['containsAny', 'containsAll', 'notContains', 'empty', 'notEmpty'],
+        });
+    }
+    if (mediaType === 'movie' || mediaType === 'series' || mediaType === 'book') {
+        const franchiseLabel = language === 'ru' ? 'Франшиза' : language === 'uk' ? 'Франшиза' : 'Franchise';
+        definitions.splice(2, 0, {
+            id: 'franchise', label: franchiseLabel, icon: 'library', type: 'list', source: 'builtin',
+            operators: ['containsAny', 'containsAll', 'notContains', 'empty', 'notEmpty'],
+        });
+    }
     if (mediaType === 'game') {
         definitions.splice(1, 0, {
             id: 'series', label: t('sortSeries'), icon: 'layers', type: 'text', source: 'builtin',

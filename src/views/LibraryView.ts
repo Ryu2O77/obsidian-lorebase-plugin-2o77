@@ -3,21 +3,33 @@
  * Main view for displaying the game library with virtualized rendering
  */
 
-import { ItemView, WorkspaceLeaf, TFile, TAbstractFile } from 'obsidian';
-import { AnimeItem, FieldDefinition, GameItem, LibraryViewState, MangaItem, MediaItem, MediaStatus, MediaType, FilterState, LorebaseSettings, LorebasePluginInterface, MovieItem, ReadingItem, SeriesItem, ViewMode, SortField } from '../types';
+import { ItemView, Notice, WorkspaceLeaf, TFile, TAbstractFile } from 'obsidian';
+import { AnimeItem, CompanionStatus, HiddenCardParts, FieldDefinition, GameItem, LibraryViewState, MangaItem, MediaItem, MediaStatus, MediaType, FilterState, LorebaseSettings, LorebasePluginInterface, MovieItem, ReadingItem, SeriesItem, ViewMode, SortField } from '../types';
 import { GameService } from '../services/GameService';
 import { AnimeService } from '../services/AnimeService';
 import { VideoService } from '../services/VideoService';
 import { ReadingService } from '../services/ReadingService';
 import { MetadataService } from '../services/MetadataService';
-import { Toolbar, ToolbarCallbacks } from '../components/Toolbar';
+import { CardStyleFlags, Toolbar, ToolbarCallbacks } from '../components/Toolbar';
 import { GameCard } from '../components/GameCard';
 import { VIEW_TYPE_LIBRARY, VIRTUALIZATION_BUFFER, LOREBASE_ICON_ID, SERIES_COLORS, STATUS_CONFIG, RATING_EMOJI, DEFAULT_GAME_TAG_PRESETS, DEFAULT_SETTINGS } from '../constants';
 import { t, i18n } from '../localization';
 import { VirtualGrid, VirtualGridController, VirtualGroupedGrid } from './library/VirtualGrid';
+import { PLATFORM_KEYS, WATCHED_WITH_KEYS, areCompanionsEqual, collectUniqueNames, collectVaultNames, parseNameList } from '../services/media/people';
+import { MassEditModal } from '../modals/MassEditModal';
+import { AutoFillModal } from '../modals/AutoFillModal';
+import { MassDeleteModal } from '../modals/MassDeleteModal';
+import { PersonPromptModal } from '../modals/PersonPromptModal';
+import { franchiseProgress, isPendingTogether, pickRandom } from '../services/media/insights';
+import { buildMassUpdates, MassEditChanges } from './library/massEdit';
 import { showMediaContextMenu } from './library/contextMenu';
 import { EffectiveLayout, LayoutCalculator } from './library/LayoutCalculator';
 import { RenderScrollMode, ScrollAnchor, ScrollManager } from './library/ScrollManager';
+import { TableView, buildTableLabels } from './library/TableView';
+import { TableColumnDef, getAvailableColumns, getCellValue, resolveTableColumns } from './library/tableColumns';
+import { resolveOptionColor } from './library/tagColors';
+import { TableColumnsModal } from '../modals/TableColumnsModal';
+import { getCompanionStatusLabels } from './library/companionLabels';
 import {
     collectToolbarTags,
     getBuiltInFieldDefinitions,
@@ -74,6 +86,9 @@ export class LibraryView extends ItemView {
     private bookService: ReadingService;
     private mangaService: ReadingService;
     private toolbar: Toolbar | null = null;
+    private selectionMode = false;
+    private readonly selectedPaths = new Set<string>();
+    private selectionBarEl: HTMLElement | null = null;
     private libraryContentEl: HTMLElement | null = null;
     private gridEl: HTMLElement | null = null;
     private isDestroyed = false; // Track if view has been destroyed
@@ -173,6 +188,8 @@ export class LibraryView extends ItemView {
 
     async onOpen(): Promise<void> {
         try {
+            this.selectionMode = false;
+            this.selectedPaths.clear();
             // Apply settings
             const settings = this.plugin.settings;
             this.mediaType = this.plugin.getMediaType();
@@ -185,7 +202,7 @@ export class LibraryView extends ItemView {
             this.seriesService.setFolderPath(settings.series.folderPath);
             this.bookService.setFolderPath(settings.books.folderPath);
             this.mangaService.setFolderPath(settings.manga.folderPath);
-            this.viewMode = activeSettings.orientation === 'horizontal' ? 'horizontal' : 'grid';
+            this.viewMode = activeSettings.tableMode ? 'table' : activeSettings.orientation === 'horizontal' ? 'horizontal' : 'grid';
 
             // Use contentEl provided by ItemView
             const container = this.contentEl;
@@ -198,6 +215,8 @@ export class LibraryView extends ItemView {
 
             // Create toolbar
             this.createToolbar(container);
+            this.selectionBarEl = container.createDiv({ cls: 'lorebase-selection-bar' });
+            this.selectionBarEl.hide();
 
             // Create content area
             this.libraryContentEl = container.createDiv({ cls: 'lorebase-content' });
@@ -452,7 +471,8 @@ export class LibraryView extends ItemView {
             onViewModeChange: (mode) => {
                 this.viewMode = mode;
                 const activeSettings = this.getActiveSettings();
-                activeSettings.orientation = mode === 'horizontal' ? 'horizontal' : 'vertical';
+                activeSettings.tableMode = mode === 'table';
+                if (mode !== 'table') activeSettings.orientation = mode === 'horizontal' ? 'horizontal' : 'vertical';
                 void this.plugin.saveSettings();
                 this.applyViewMode();
                 this.render({ scrollMode: 'top' });
@@ -528,9 +548,14 @@ export class LibraryView extends ItemView {
                 );
                 this.applyFiltersAndSort({ scrollMode: 'top' });
             },
+            onToggleSelection: () => this.setSelectionMode(!this.selectionMode),
+            onTogether: () => this.showTogetherPick(),
             onMediaTypeChange: (mediaType) => {
                 void this.plugin.switchMediaType(mediaType);
             },
+            onCardScaleChange: (scale) => { void this.setCardScale(scale); },
+            onHiddenCardPartsChange: (parts) => { void this.setHiddenCardParts(parts); },
+            onCardStyleFlagsChange: (flags) => { void this.setCardStyleFlags(flags); },
         };
 
         const activeSettings = this.getActiveSettings();
@@ -551,8 +576,64 @@ export class LibraryView extends ItemView {
             this.getFieldDefinitions(),
             this.getDefaultViewState(),
             this.mediaType,
-            this.plugin.getEnabledMediaTypes()
+            this.plugin.getEnabledMediaTypes(),
+            activeSettings.cardScale ?? 1,
+            this.getHiddenCardParts(),
+            this.getCardStyleFlags()
         );
+    }
+
+    private getCardStyleFlags(): CardStyleFlags {
+        const settings = this.getActiveSettings();
+        return {
+            hoverPreview: settings.hoverPreview !== false,
+            progressFooter: settings.progressFooter === true,
+            titleBelow: settings.titleBelow === true,
+        };
+    }
+
+    /** Persists the Hover preview / Progress footer / Title below shortcuts and redraws the cards. */
+    private async setCardStyleFlags(flags: CardStyleFlags): Promise<void> {
+        const settings = this.getActiveSettings();
+        settings.hoverPreview = flags.hoverPreview;
+        settings.progressFooter = flags.progressFooter;
+        settings.titleBelow = flags.titleBelow;
+        await this.plugin.saveSettings();
+        if (this.isDestroyed) return;
+        this.render({ scrollMode: 'preserve' });
+    }
+
+    /**
+     * State of the quick-hide switches. Status and rating read the same badge settings as the card
+     * customization screen (one source of truth); only the "Status for" strip has its own flag.
+     */
+    private getHiddenCardParts(): HiddenCardParts {
+        const badges = this.getBadgeProfile(this.mediaType);
+        return {
+            status: !badges.status.enabled,
+            rating: !badges.rating.enabled,
+            companions: Boolean(this.getActiveSettings().hiddenCardParts?.companions),
+        };
+    }
+
+    /** Persists the quick-hide switches and redraws the cards. */
+    private async setHiddenCardParts(parts: HiddenCardParts): Promise<void> {
+        const badges = this.getBadgeProfile(this.mediaType);
+        badges.status.enabled = !parts.status;
+        badges.rating.enabled = !parts.rating;
+        this.getActiveSettings().hiddenCardParts = { companions: Boolean(parts.companions) };
+        await this.plugin.saveSettings();
+        if (this.isDestroyed) return;
+        this.render({ scrollMode: 'preserve' });
+    }
+
+    /** Persists the poster-size slider and relayouts the grid, keeping the image's aspect ratio. */
+    private async setCardScale(scale: number): Promise<void> {
+        const settings = this.getActiveSettings();
+        settings.cardScale = scale;
+        await this.plugin.saveSettings();
+        if (this.isDestroyed) return;
+        this.render({ scrollMode: 'preserve' });
     }
 
     /**
@@ -733,6 +814,11 @@ export class LibraryView extends ItemView {
             return;
         }
 
+        if (this.viewMode === 'table') {
+            this.renderTableView(scrollMode, anchor, version);
+            return;
+        }
+
         const shouldGroup = this.viewState.group.mode !== 'none';
 
         if (shouldGroup) {
@@ -747,12 +833,12 @@ export class LibraryView extends ItemView {
         const layout = this.getEffectiveLayout();
         const renderedLayout = { ...layout, columns: this.getRenderedColumns(layout) };
         const locale = i18n.getLanguage() === 'uk' ? 'uk-UA' : i18n.getLanguage() === 'ru' ? 'ru-RU' : 'en-US';
-        const groups = groupMediaItems(
+        const groups = this.withGroupProgress(groupMediaItems(
             this.filteredGames,
             this.viewState.group.mode,
             this.viewState.group.order,
             locale
-        );
+        ));
         if (this.filteredGames.length > 100) {
             this.gridEl = createGrid({
                 container: this.libraryContentEl,
@@ -781,6 +867,7 @@ export class LibraryView extends ItemView {
             const section = this.libraryContentEl!.createDiv({ cls: 'lorebase-series-section lorebase-view-group-section' });
             const title = section.createDiv({ cls: 'lorebase-series-title lorebase-view-group-title' });
             title.createSpan({ text: group.label });
+            if (group.progress) title.createSpan({ cls: 'lorebase-view-group-progress', text: group.progress.text, attr: { title: group.progress.title } });
             title.createSpan({ cls: 'lorebase-view-group-count', text: String(group.items.length) });
             title.style.borderLeftColor = SERIES_COLORS[index % SERIES_COLORS.length];
             const grid = createGrid({ container: section, layout: renderedLayout, className: 'lorebase-grid' });
@@ -790,6 +877,190 @@ export class LibraryView extends ItemView {
         this.renderCardsInBatches(tasks, version, () => {
             this.finishContentRebuild(version, () => this.scrollManager.apply(scrollMode, anchor));
         });
+    }
+
+    private renderTableView(scrollMode: RenderScrollMode, anchor: ScrollAnchor | null, version: number): void {
+        const host = this.libraryContentEl;
+        if (!host) return;
+        const settings = this.getActiveSettings();
+        const labels = buildTableLabels();
+        const available = getAvailableColumns(this.games, labels);
+        const columns = resolveTableColumns(settings.table, available);
+        const locale = i18n.getLanguage() === 'uk' ? 'uk-UA' : i18n.getLanguage() === 'ru' ? 'ru-RU' : 'en-US';
+        const groups = this.viewState.group.mode !== 'none'
+            ? this.withGroupProgress(groupMediaItems(this.filteredGames, this.viewState.group.mode, this.viewState.group.order, locale))
+            : null;
+        const savedScroll = scrollMode === 'preserve' || scrollMode === 'position' ? (anchor?.scrollTop ?? this.contentEl.scrollTop) : 0;
+
+        new TableView({
+            container: host,
+            items: this.filteredGames,
+            groups,
+            columns,
+            config: settings.table,
+            statusOptions: this.getStatusOptions(),
+            companionLabels: getCompanionStatusLabels(this.mediaType),
+            halfRatings: true,
+            isSelected: (item) => this.selectedPaths.has(item.filePath),
+            onOpen: (item) => { void this.handleCardClick(item); },
+            onContextMenu: (item, x, y) => this.showContextMenu(item, x, y),
+            onUpdate: (item, updates) => this.applyTableUpdate(item, updates),
+            onPerson: (item, name, change) => this.applyTablePerson(item, name, change),
+            onConfigChange: (config) => {
+                this.getActiveSettings().table = config;
+                void this.plugin.saveSettings();
+            },
+            isListEditable: (item, column) => this.isTableListEditable(item, column),
+            getListOptions: (column) => this.getTableListOptions(column),
+            getOptionColor: (column, value) => resolveOptionColor(this.plugin.settings.tableOptionColors?.[column.key], value),
+            onOptionColor: (column, value, color) => {
+                const all = this.plugin.settings.tableOptionColors ?? {};
+                all[column.key] = { ...(all[column.key] ?? {}), [value.trim().toLocaleLowerCase()]: color };
+                this.plugin.settings.tableOptionColors = all;
+                void this.plugin.saveSettings();
+                this.render({ scrollMode: 'preserve' });
+            },
+            onListChange: (item, column, values) => this.applyTableList(item, column, values),
+            isTextEditable: (item, column) => this.isTableTextEditable(item, column),
+            onTextChange: (item, column, value) => this.applyTableText(item, column, value),
+            onOpenColumns: () => {
+                const current = resolveTableColumns(this.getActiveSettings().table, available).map((column) => column.key);
+                new TableColumnsModal(this.app, available, this.getActiveSettings().table, current, (keys) => {
+                    const previous = this.getActiveSettings().table;
+                    this.getActiveSettings().table = { columns: keys, widths: { ...(previous?.widths ?? {}) }, wrap: Boolean(previous?.wrap) };
+                    void this.plugin.saveSettings();
+                    this.render({ scrollMode: 'preserve' });
+                }).open();
+            },
+        });
+        this.finishContentRebuild(version, () => {
+            this.contentEl.scrollTop = savedScroll;
+        });
+    }
+
+    /** Sends a partial update to the service that owns this item's type. */
+    private dispatchItemUpdate(item: MediaItem, updates: Record<string, unknown>): void {
+        if (item.type === 'game') void this.gameService.updateGame(item, updates as Partial<GameItem>);
+        else if (item.type === 'anime') void this.animeService.updateAnime(item, updates as Partial<AnimeItem>);
+        else if (item.type === 'movie') void this.movieService.updateItem(item, updates as Partial<MovieItem>);
+        else if (item.type === 'series') void this.seriesService.updateItem(item, updates as Partial<SeriesItem>);
+        else if (item.type === 'book') void this.bookService.updateItem(item, updates as Partial<ReadingItem>);
+        else void this.mangaService.updateItem(item, updates as Partial<ReadingItem>);
+    }
+
+    private applyTableUpdate(item: MediaItem, updates: Record<string, unknown>): void {
+        if (this.isDestroyed) return;
+        Object.assign(item, updates);
+        this.handleContextItemMutation(item, Object.keys(updates));
+        this.dispatchItemUpdate(item, updates);
+    }
+
+    private isTableListEditable(item: MediaItem, column: TableColumnDef): boolean {
+        switch (column.key) {
+            case 'b:tags': case 'b:genres': case 'b:platforms': case 'b:people': return true;
+            case 'b:franchise': return item.type === 'movie' || item.type === 'series' || item.type === 'book' || item.type === 'manga';
+            // Each type edits only the field its "creators" cell shows: director (movie/series), authors
+            // (book), studios (anime), developer (game). Manga shows authors and artists together, so
+            // names stay in the field they already belong to and new names go to authors; the separate
+            // Artists column edits artists on its own.
+            case 'b:creators': return true;
+            case 'b:artists': return item.type === 'manga';
+            default: return column.key.startsWith('r:') && column.kind === 'list';
+        }
+    }
+
+    private getTableListOptions(column: TableColumnDef): string[] {
+        const seen = new Map<string, string>();
+        const add = (value: unknown): void => {
+            const text = String(value ?? '').trim();
+            if (text && !seen.has(text.toLocaleLowerCase())) seen.set(text.toLocaleLowerCase(), text);
+        };
+        for (const item of this.games) {
+            const value = getCellValue(item, column);
+            if (Array.isArray(value)) value.forEach(add);
+        }
+        if (column.key === 'b:people') collectVaultNames(this.app, WATCHED_WITH_KEYS).forEach(add);
+        if (column.key === 'b:platforms') collectVaultNames(this.app, PLATFORM_KEYS).forEach(add);
+        return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+    }
+
+    private applyTableList(item: MediaItem, column: TableColumnDef, values: string[]): void {
+        if (this.isDestroyed) return;
+        const key = column.key;
+        if (key === 'b:people') {
+            const current = item.watchedWith ?? [];
+            const same = (a: string, b: string): boolean => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+            const add = values.filter((value) => !current.some((entry) => same(entry, value)));
+            const remove = current.filter((entry) => !values.some((value) => same(entry, value)));
+            const updates = buildMassUpdates(item, { watchedWithAdd: add, watchedWithRemove: remove });
+            if (Object.keys(updates).length) this.applyTableUpdate(item, updates);
+            return;
+        }
+        if (key === 'b:tags') { this.applyTableUpdate(item, { tags: values }); return; }
+        if (key === 'b:genres') { this.applyTableUpdate(item, { genres: values }); return; }
+        if (key === 'b:platforms') { this.applyTableUpdate(item, { platforms: values }); return; }
+        if (key === 'b:franchise') { this.applyTableUpdate(item, { franchise: values }); return; }
+        if (key === 'b:creators') {
+            if (item.type === 'movie' || item.type === 'series') this.applyTableUpdate(item, { director: values.join(', ') });
+            else if (item.type === 'book') this.applyTableUpdate(item, { authors: values });
+            else if (item.type === 'anime') this.applyTableUpdate(item, { studios: values });
+            else if (item.type === 'game') this.applyTableUpdate(item, { developer: values.join(', ') });
+            else if (item.type === 'manga') {
+                const same = (a: string, b: string): boolean => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+                const artists = item.artists ?? [];
+                const keptArtists = artists.filter((name) => values.some((value) => same(value, name)));
+                const authors = values.filter((value) => !artists.some((name) => same(name, value)));
+                this.applyTableUpdate(item, { authors, artists: keptArtists });
+            }
+            return;
+        }
+        if (key === 'b:artists') {
+            if (item.type === 'manga') this.applyTableUpdate(item, { artists: values });
+            return;
+        }
+        if (key.startsWith('r:')) {
+            const property = key.slice(2);
+            const file = this.app.vault.getAbstractFileByPath(item.filePath);
+            if (!(file instanceof TFile)) return;
+            void this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+                if (values.length) frontmatter[property] = values;
+                else delete frontmatter[property];
+            });
+            item.rawFields = { ...(item.rawFields ?? {}), [property]: values.length ? values : null };
+            this.handleContextItemMutation(item, ['rawFields']);
+        }
+    }
+
+    private isTableTextEditable(_item: MediaItem, column: TableColumnDef): boolean {
+        if (['b:year', 'b:started', 'b:finished'].includes(column.key)) return true;
+        return column.key.startsWith('r:') && (column.kind === 'text' || column.kind === 'number' || column.kind === 'date');
+    }
+
+    /** Commits an edited date/year/text cell: known builtin keys go through the typed update, raw properties write directly. */
+    private applyTableText(item: MediaItem, column: TableColumnDef, value: string | number | null): void {
+        if (this.isDestroyed) return;
+        switch (column.key) {
+            case 'b:year': this.applyTableUpdate(item, { year: value }); return;
+            case 'b:started': this.applyTableUpdate(item, { started: value }); return;
+            case 'b:finished': this.applyTableUpdate(item, { finished: value }); return;
+            default: break;
+        }
+        if (!column.key.startsWith('r:')) return;
+        const property = column.key.slice(2);
+        const file = this.app.vault.getAbstractFileByPath(item.filePath);
+        if (!(file instanceof TFile)) return;
+        void this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+            if (value === null) delete frontmatter[property];
+            else frontmatter[property] = value;
+        });
+        item.rawFields = { ...(item.rawFields ?? {}), [property]: value };
+        this.handleContextItemMutation(item, ['rawFields']);
+    }
+
+    private applyTablePerson(item: MediaItem, name: string, change: { status?: CompanionStatus | null; rating?: number | null }): void {
+        const updates = buildMassUpdates(item, { person: { name, ...change } });
+        if (!Object.keys(updates).length) return;
+        this.applyTableUpdate(item, updates);
     }
 
     private getEmptyStateText(): string {
@@ -824,7 +1095,7 @@ export class LibraryView extends ItemView {
         );
         this.gridEl.toggleClass(
             'lorebase-grid-progress-style',
-            activeSettings.cardStyle === 'progress'
+            activeSettings.progressFooter === true || activeSettings.titleBelow === true
         );
 
         // For small collections, render all
@@ -1134,7 +1405,8 @@ export class LibraryView extends ItemView {
             },
             layout.cardSize,
             layout.orientation,
-            activeSettings.cardStyle,
+            activeSettings.hoverPreview !== false,
+            activeSettings.progressFooter === true,
             this.viewState.sort.field,
             this.getBadgeProfile(game.type),
             overlayProfile.layout,
@@ -1147,13 +1419,17 @@ export class LibraryView extends ItemView {
             },
             this.getStatusLabelOverrides(game.type),
             this.getCompletionDateBadgeFormat(game.type),
-            (value) => this.plugin.getMetadataService()?.getImageUrl(value) ?? null
+            (value) => this.plugin.getMetadataService()?.getImageUrl(value) ?? null,
+            layout.cardScale,
+            { companions: Boolean(activeSettings.hiddenCardParts?.companions) },
+            activeSettings.titleBelow === true
         );
         card.getElement().dataset.lorebaseFilePath = game.filePath;
         card.getElement().toggleClass(
             'lorebase-book-cover-effect',
             (game.type === 'book' || game.type === 'manga') && Boolean(activeSettings.bookCoverEffect)
         );
+        if (this.selectedPaths.has(game.filePath)) card.getElement().addClass('is-selected');
         return card;
     }
 
@@ -1176,6 +1452,9 @@ export class LibraryView extends ItemView {
             || !this.areRawFieldsEquivalent(left.rawFields, right.rawFields)
             || !this.areStringArraysEquivalent(left.tags, right.tags)
             || !this.areStringArraysEquivalent(left.genres, right.genres)
+            || !this.areStringArraysEquivalent(left.watchedWith ?? [], right.watchedWith ?? [])
+            || !this.areStringArraysEquivalent(left.franchise ?? [], right.franchise ?? [])
+            || !areCompanionsEqual(left.companions, right.companions)
         ) {
             return false;
         }
@@ -1353,7 +1632,228 @@ export class LibraryView extends ItemView {
         await this.app.workspace.openLinkText(game.filePath, '', false);
     }
 
+    // ---- Multi-select / mass edit ----
+
+    private setSelectionMode(active: boolean): void {
+        this.selectionMode = active;
+        if (!active) this.selectedPaths.clear();
+        this.libraryContentEl?.toggleClass('is-selecting', active);
+        this.toolbar?.setSelectionActive(active);
+        this.refreshSelectionVisuals();
+        this.renderSelectionBar();
+    }
+
+    private toggleSelected(path: string): void {
+        if (this.selectedPaths.has(path)) this.selectedPaths.delete(path);
+        else this.selectedPaths.add(path);
+        this.refreshSelectionVisuals();
+        this.renderSelectionBar();
+    }
+
+    private refreshSelectionVisuals(): void {
+        const cards = this.contentEl.querySelectorAll<HTMLElement>('.lorebase-card[data-lorebase-path]');
+        cards.forEach((el) => {
+            const path = el.dataset.lorebasePath ?? '';
+            el.toggleClass('is-selected', this.selectionMode && this.selectedPaths.has(path));
+        });
+    }
+
+    private renderSelectionBar(): void {
+        const bar = this.selectionBarEl;
+        if (!bar) return;
+        bar.empty();
+        if (!this.selectionMode) {
+            bar.hide();
+            return;
+        }
+        bar.show();
+        bar.createSpan({ cls: 'lorebase-selection-count', text: `${this.selectedPaths.size} ${t('massSelectedSuffix')}` });
+        const button = (label: string, cls: string, onClick: () => void): void => {
+            const el = bar.createEl('button', { cls: `lorebase-btn ${cls}`.trim(), text: label, attr: { type: 'button' } });
+            el.addEventListener('click', onClick);
+        };
+        button(t('massSelectAll'), '', () => {
+            for (const item of this.filteredGames) this.selectedPaths.add(item.filePath);
+            this.refreshSelectionVisuals();
+            this.renderSelectionBar();
+        });
+        button(t('massClear'), '', () => {
+            this.selectedPaths.clear();
+            this.refreshSelectionVisuals();
+            this.renderSelectionBar();
+        });
+        button(t('autoFill'), '', () => { this.openAutoFill(); });
+        button(t('massHide'), '', () => { void this.openMassHide(); });
+        button(t('massEdit'), 'lorebase-btn-primary', () => { void this.openMassEdit(); });
+        button(t('massDelete'), 'mod-warning lorebase-btn-danger', () => { void this.openMassDelete(); });
+        button(t('massDone'), '', () => this.setSelectionMode(false));
+    }
+
+    private async openMassHide(): Promise<void> {
+        const items = this.games.filter((item) => this.selectedPaths.has(item.filePath));
+        if (!items.length) {
+            new Notice(t('massNothingSelected'));
+            return;
+        }
+        await this.setItemsHidden(items, true);
+        this.selectedPaths.clear();
+        this.renderSelectionBar();
+    }
+
+    /** Writes (or removes) `lorebase_hidden` on each note and drops hidden items from the grid. */
+    private async setItemsHidden(items: MediaItem[], hidden: boolean): Promise<void> {
+        const metadata = this.plugin.getMetadataService();
+        if (!metadata) return;
+        let changed = 0;
+        for (const item of items) {
+            const file = this.app.vault.getAbstractFileByPath(item.filePath);
+            if (!(file instanceof TFile)) continue;
+            try {
+                await metadata.updateMetadata(file, { lorebase_hidden: hidden ? true : null });
+                changed++;
+            } catch (error: unknown) {
+                console.error('Lorebase: could not change hidden state for', item.filePath, error);
+            }
+        }
+        if (hidden && !this.plugin.settings.hiddenFiles.showHidden) {
+            const gone = new Set(items.map((item) => item.filePath));
+            this.games = this.games.filter((entry) => !gone.has(entry.filePath));
+            this.applyFiltersAndSort({ scrollMode: 'preserve' });
+        }
+        new Notice(`${changed} ${t('massHidden')}`);
+    }
+
+    private async openMassDelete(): Promise<void> {
+        const items = this.games.filter((item) => this.selectedPaths.has(item.filePath));
+        if (!items.length) {
+            new Notice(t('massNothingSelected'));
+            return;
+        }
+        const confirmed = await new MassDeleteModal(this.app, items.map((item) => item.displayName)).openAndGetValue();
+        if (!confirmed || this.isDestroyed) return;
+        let deleted = 0;
+        for (const item of items) {
+            try {
+                await this.deleteItemDirect(item);
+                this.games = this.games.filter((entry) => entry.filePath !== item.filePath);
+                this.selectedPaths.delete(item.filePath);
+                deleted++;
+            } catch (error: unknown) {
+                console.error('Lorebase: mass delete failed for', item.filePath, error);
+            }
+        }
+        new Notice(`${deleted} ${t('massDeleted')}`);
+        this.applyFiltersAndSort({ scrollMode: 'preserve' });
+        this.renderSelectionBar();
+    }
+
+    private async deleteItemDirect(item: MediaItem): Promise<void> {
+        switch (item.type) {
+            case 'anime': await this.animeService.deleteAnime(item); break;
+            case 'movie': await this.movieService.deleteItem(item); break;
+            case 'series': await this.seriesService.deleteItem(item); break;
+            case 'book': await this.bookService.deleteItem(item); break;
+            case 'manga': await this.mangaService.deleteItem(item); break;
+            default: await this.gameService.deleteGame(item); break;
+        }
+    }
+
+    private openAutoFill(): void {
+        const unlinked = this.games.filter((item) => (
+            this.selectedPaths.has(item.filePath) && !(item.integrationProvider && item.integrationId)
+        ));
+        if (!unlinked.length) {
+            new Notice(this.selectedPaths.size ? t('autoFillNothing') : t('massNothingSelected'));
+            return;
+        }
+        new AutoFillModal(
+            this.app,
+            unlinked,
+            (item, acceptFirst) => this.plugin.autoFillMediaItem(item, acceptFirst),
+            () => this.plugin.refreshViews()
+        ).open();
+    }
+
+    /** Random pick among items still pending for me and for everyone they are shared with. */
+    private showTogetherPick(): void {
+        if (!this.libraryContentEl) return;
+        const pick = pickRandom(this.filteredGames.filter((item) => isPendingTogether(item)));
+        if (!pick) {
+            new Notice(t('togetherNone'));
+            return;
+        }
+        renderRandomCard({
+            container: this.libraryContentEl,
+            item: pick,
+            titleText: t('togetherTitle'),
+            backText: t('commonBack'),
+            createCard: (parent, item) => {
+                this.createCard(parent, item);
+            },
+            onBack: () => this.render({ scrollMode: 'preserve' }),
+        });
+    }
+
+    private withGroupProgress<G extends { items: MediaItem[]; missing?: boolean }>(
+        groups: G[]
+    ): Array<G & { progress?: { text: string; title: string } }> {
+        if (this.viewState.group.mode !== 'franchise') return groups;
+        return groups.map((group) => {
+            if (group.missing) return group;
+            const progress = franchiseProgress(group.items);
+            return {
+                ...group,
+                progress: {
+                    text: `\u2713 ${progress.done}/${progress.total}`,
+                    title: progress.next ? `${t('franchiseNext')}: ${progress.next.displayName}` : t('franchiseAllDone'),
+                },
+            };
+        });
+    }
+
+    private async openMassEdit(): Promise<void> {
+        const items = this.games.filter((item) => this.selectedPaths.has(item.filePath));
+        if (!items.length) {
+            new Notice(t('massNothingSelected'));
+            return;
+        }
+        const changes = await new MassEditModal(this.app, this.mediaType, items.length).openAndGetValue();
+        if (!changes) return;
+        await this.applyMassEdit(items, changes);
+    }
+
+    private async applyMassEdit(items: MediaItem[], changes: MassEditChanges): Promise<void> {
+        let updated = 0;
+        for (const item of items) {
+            if (this.isDestroyed) return;
+            const updates = buildMassUpdates(item, changes);
+            if (!Object.keys(updates).length) continue;
+            try {
+                await this.updateItemDirect(item, updates);
+                updated++;
+            } catch (error: unknown) {
+                console.error('Lorebase: mass edit failed for', item.filePath, error);
+            }
+        }
+        new Notice(`${updated} ${t('massUpdated')}`);
+    }
+
+    private async updateItemDirect(item: MediaItem, updates: Record<string, unknown>): Promise<void> {
+        switch (item.type) {
+            case 'anime': await this.animeService.updateAnime(item, updates as Partial<AnimeItem>); break;
+            case 'game': await this.gameService.updateGame(item, updates as Partial<GameItem>); break;
+            case 'movie': await this.movieService.updateItem(item, updates); break;
+            case 'series': await this.seriesService.updateItem(item, updates); break;
+            case 'book': await this.bookService.updateItem(item, updates); break;
+            default: await this.mangaService.updateItem(item, updates); break;
+        }
+    }
+
     private async handleCardClick(game: MediaItem): Promise<void> {
+        if (this.selectionMode) {
+            this.toggleSelected(game.filePath);
+            return;
+        }
         if (this.plugin.settings.cardClickAction === 'edit') {
             this.openEditModal(game);
             return;
@@ -1378,6 +1878,10 @@ export class LibraryView extends ItemView {
      * Show context menu for a game
      */
     private showContextMenu(game: MediaItem, x: number, y: number): void {
+        if (this.selectionMode) {
+            this.toggleSelected(game.filePath);
+            return;
+        }
         showMediaContextMenu(game, x, y, {
             isDestroyed: () => this.isDestroyed,
             getStatusOptions: () => this.getStatusOptions(),
@@ -1437,12 +1941,24 @@ export class LibraryView extends ItemView {
                     void this.mangaService.updateItem(readingItem, updates);
                 }
             },
+            onHide: (target, hidden) => { void this.setItemsHidden([target], hidden); },
+            getKnownPeople: () => parseNameList([
+                ...collectVaultNames(this.app, WATCHED_WITH_KEYS),
+                ...collectUniqueNames(this.games, (entry) => entry.watchedWith),
+            ]),
+            promptPerson: () => new PersonPromptModal(
+                this.app,
+                parseNameList([
+                    ...collectVaultNames(this.app, WATCHED_WITH_KEYS),
+                    ...collectUniqueNames(this.games, (entry) => entry.watchedWith),
+                ])
+            ).openAndGetValue(),
         });
     }
 
     private handleContextItemMutation(item: MediaItem, changedFields: string[]): void {
         this.optimisticMutations.set(item.filePath, Date.now() + OPTIMISTIC_METADATA_SUPPRESS_MS);
-        if (this.shouldFullRefreshAfterMutation(changedFields)) {
+        if (this.viewMode === 'table' || this.shouldFullRefreshAfterMutation(changedFields)) {
             this.applyFiltersAndSort({ scrollMode: 'preserve' });
             return;
         }
@@ -1534,7 +2050,10 @@ export class LibraryView extends ItemView {
 
         if (badgeProfile.rating.mode === 'emoji') {
             ratingBadge.addClass('is-emoji');
-            ratingBadge.textContent = RATING_EMOJI[item.userRating] ?? '';
+            ratingBadge.textContent = RATING_EMOJI[Math.round(item.userRating)] ?? '';
+            if (!Number.isInteger(item.userRating)) {
+                ratingBadge.createSpan({ cls: 'lorebase-card-rating-half', text: String(item.userRating) });
+            }
             return;
         }
 
@@ -1696,31 +2215,31 @@ export class LibraryView extends ItemView {
     private showStats(): void {
         if (this.mediaType === 'anime') {
             const stats = this.animeService.calculateStats(this.games as AnimeItem[]);
-            this.plugin.showStatsModal(stats, 'anime');
+            this.plugin.showStatsModal(stats, 'anime', this.games);
             return;
         }
         if (this.mediaType === 'movie') {
             const stats = this.movieService.calculateStats(this.games as MovieItem[]);
-            this.plugin.showStatsModal(stats, 'movie');
+            this.plugin.showStatsModal(stats, 'movie', this.games);
             return;
         }
         if (this.mediaType === 'series') {
             const stats = this.seriesService.calculateStats(this.games as SeriesItem[]);
-            this.plugin.showStatsModal(stats, 'series');
+            this.plugin.showStatsModal(stats, 'series', this.games);
             return;
         }
         if (this.mediaType === 'book') {
             const stats = this.bookService.calculateStats(this.games as ReadingItem[]);
-            this.plugin.showStatsModal(stats, 'book');
+            this.plugin.showStatsModal(stats, 'book', this.games);
             return;
         }
         if (this.mediaType === 'manga') {
             const stats = this.mangaService.calculateStats(this.games as ReadingItem[]);
-            this.plugin.showStatsModal(stats, 'manga');
+            this.plugin.showStatsModal(stats, 'manga', this.games);
             return;
         }
         const stats = this.gameService.calculateStats(this.games as GameItem[]);
-        this.plugin.showStatsModal(stats, 'game');
+        this.plugin.showStatsModal(stats, 'game', this.games);
     }
 
     /**
@@ -1848,7 +2367,12 @@ export class LibraryView extends ItemView {
     }
 
     private getEffectiveLayout(): EffectiveLayout {
-        return this.layoutCalculator.getEffectiveLayout(this.getActiveSettings(), this.viewMode);
+        const layout = this.layoutCalculator.getEffectiveLayout(this.getActiveSettings(), this.viewMode);
+        // Movies and games have no progress to show, so the progress footer adds no height for them.
+        if (layout.progressFooter && (this.mediaType === 'movie' || this.mediaType === 'game')) {
+            return { ...layout, progressFooter: false };
+        }
+        return layout;
     }
 
     private getRenderedColumns(layout: EffectiveLayout): number {
@@ -1862,7 +2386,7 @@ export class LibraryView extends ItemView {
         this.mediaType = nextType;
         const activeSettings = this.getActiveSettings();
         this.setViewState(activeSettings.viewState, false);
-        this.viewMode = activeSettings.orientation === 'horizontal' ? 'horizontal' : 'grid';
+        this.viewMode = activeSettings.tableMode ? 'table' : activeSettings.orientation === 'horizontal' ? 'horizontal' : 'grid';
         this.applyViewMode();
         this.filter.adultOnly = false;
         this.filter.customOnly = false;
@@ -1934,8 +2458,18 @@ export class LibraryView extends ItemView {
     }
 
     private getFieldDefinitions(): FieldDefinition[] {
+        const builtIn = getBuiltInFieldDefinitions(this.mediaType, this.getStatusOptions(), this.getFilterFlags())
+            .map((definition) => {
+                if (definition.id !== 'watchedWith' && definition.id !== 'franchise') return definition;
+                const names = collectUniqueNames(this.games, (item) => (
+                    definition.id === 'watchedWith' ? item.watchedWith : item.franchise
+                ));
+                return names.length
+                    ? { ...definition, options: names.map((name) => ({ value: name, label: name })) }
+                    : definition;
+            });
         return [
-            ...getBuiltInFieldDefinitions(this.mediaType, this.getStatusOptions(), this.getFilterFlags()),
+            ...builtIn,
             ...collectYamlFieldDefinitions(this.games),
         ];
     }

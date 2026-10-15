@@ -30,7 +30,34 @@ export interface FilterableMediaItem {
     started?: string | null;
     finished?: string | null;
     dateCompleted?: number | null;
+    watchedWith?: string[];
+    franchise?: string[];
+    /** Creators, so the local search also finds directors, authors, artists, studios and developers */
+    director?: string | null;
+    authors?: string[];
+    artists?: string[];
+    studios?: string[];
+    developer?: string | null;
+    /** Title in its original language, so the local search also finds it */
+    originalTitle?: string;
     rawFields?: Record<string, SimpleFieldValue>;
+}
+
+/** True when the lowercase search text appears in the title, the original title or in any creator of the item. */
+export function matchesLocalSearch(item: FilterableMediaItem, searchLower: string): boolean {
+    if (item.nameLower && item.nameLower.includes(searchLower)) return true;
+    if (item.originalTitle && item.originalTitle.toLowerCase().includes(searchLower)) return true;
+    const creators: Array<string | null | undefined> = [
+        item.director,
+        item.developer,
+        ...(item.authors ?? []),
+        ...(item.artists ?? []),
+        ...(item.studios ?? []),
+    ];
+    for (const creator of creators) {
+        if (creator && creator.toLowerCase().includes(searchLower)) return true;
+    }
+    return false;
 }
 
 const BUILTIN_FIELDS = new Set([
@@ -38,6 +65,7 @@ const BUILTIN_FIELDS = new Set([
     'started', 'datestarted', 'start_date', 'finished', 'datefinished', 'finish_date',
     'datecompleted', 'dateread', 'readdate', 'completeddate', 'datewatched', 'watched',
     'tags', 'genres', 'genre', 'year', 'rating', 'userrating', 'rating_user', 'gameseries',
+    'watched_with', 'watchedwith', 'franchise', 'franchises',
 ]);
 
 const TEXT_OPERATORS: FilterOperator[] = ['contains', 'equals', 'notEquals', 'empty', 'notEmpty'];
@@ -166,6 +194,8 @@ export function getViewFieldValue(item: FilterableMediaItem, field: string): unk
         case 'custom': return item.hasCustomPoster;
         case 'tags': return item.tags;
         case 'genres': return item.genres;
+        case 'watchedWith': return item.watchedWith ?? [];
+        case 'franchise': return item.franchise ?? [];
         case 'dateStarted': return item.started ?? null;
         case 'dateCompleted':
         case 'dateFinished': return item.finished ?? item.dateCompleted ?? null;
@@ -260,6 +290,13 @@ export function groupMediaItems(
             key = series || '__missing__';
             label = series || (locale.startsWith('ru') ? 'Без серии' : locale.startsWith('uk') ? 'Без серії' : 'No series');
             missing = !series;
+        } else if (mode === 'franchise') {
+            const franchise = (item.type === 'movie' || item.type === 'series' || item.type === 'book')
+                ? (item.franchise?.[0] ?? '').trim()
+                : '';
+            key = franchise ? `franchise:${franchise.toLocaleLowerCase()}` : '__missing__';
+            label = franchise || (locale.startsWith('ru') ? 'Без франшизы' : locale.startsWith('uk') ? 'Без франшизи' : 'No franchise');
+            missing = !franchise;
         } else {
             const dateValue = parseDateValue(item.finished ?? (item.type === 'game' ? item.dateCompleted : null));
             if (dateValue === null) {
@@ -288,7 +325,7 @@ export function groupMediaItems(
         .map(([key, group]) => ({ key, ...group }))
         .sort((left, right) => {
             if (left.missing !== right.missing) return left.missing ? 1 : -1;
-            if (mode === 'series') {
+            if (mode === 'series' || mode === 'franchise') {
                 const comparison = left.label.localeCompare(right.label, locale, { numeric: true });
                 return order === 'asc' ? comparison : -comparison;
             }
@@ -334,7 +371,7 @@ function normalizeOrder(value: unknown, fallback: SortOrder): SortOrder {
 }
 
 function normalizeGroupMode(value: unknown, fallback: GroupMode): GroupMode {
-    return value === 'none' || value === 'series' || value === 'finishedMonth' || value === 'finishedYear'
+    return value === 'none' || value === 'series' || value === 'franchise' || value === 'finishedMonth' || value === 'finishedYear'
         ? value
         : fallback;
 }

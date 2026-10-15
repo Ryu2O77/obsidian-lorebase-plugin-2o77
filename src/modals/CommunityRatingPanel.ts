@@ -103,6 +103,11 @@ export function renderCommunityRatingPanel(
         return;
     }
 
+    const companions = column.querySelector<HTMLElement>('.lorebase-editmode-companions');
+    if (companions) {
+        companions.before(panel);
+        return;
+    }
     const dates = column.querySelector<HTMLElement>('.lorebase-editmode-timestamps');
     if (dates) dates.before(panel);
     else column.appendChild(panel);

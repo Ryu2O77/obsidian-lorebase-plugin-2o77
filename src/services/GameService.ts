@@ -4,6 +4,7 @@
  * OPTIMIZED for performance with 10000+ items
  */
 
+import { isFileHidden } from './media/hiddenFiles';
 import { App, TFile, TFolder } from 'obsidian';
 import { GameDlc, GameItem, GameStatus, FilterState, GameStats, SortField, SortOrder } from '../types';
 import { MetadataService } from './MetadataService';
@@ -11,9 +12,11 @@ import { DEFAULT_COVER } from '../constants';
 import { t } from '../localization';
 import { filterAndSortMedia } from './media/filtering';
 import { extractSimpleFrontmatter } from './media/libraryViewState';
-import { getRandomItem, parseRelatedMedia, serializeRelatedMedia } from './media/parsers';
+import { getRandomItem, parseRelatedMedia, parseUserRating, serializeRelatedMedia, ratingBucket } from './media/parsers';
 import { collectFieldTags, collectTags, getAllMarkdownFiles, isTruthy, mapInFrameBatches, normalizeCacheTags } from './media/serviceUtils';
 import { upsertMarkdownSection } from './markdownSections';
+import { toStoredImagePath } from './media/imagePaths';
+import { WATCHED_WITH_KEYS, companionFrontmatter, readCompanions, readNameList, serializeNameList } from './media/people';
 
 export { extractMarkdownSection, upsertMarkdownSection } from './markdownSections';
 
@@ -245,11 +248,7 @@ export class GameService {
     }
 
     private parseUserRating(value: unknown): GameDlc['userRating'] {
-        if (value === null || value === undefined || value === '') return null;
-        const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
-        return Number.isFinite(parsed) && parsed >= 1 && parsed <= 5
-            ? parsed as GameDlc['userRating']
-            : null;
+        return parseUserRating(value) as GameDlc['userRating'];
     }
 
     private updateFrontmatterTextField(
@@ -368,6 +367,7 @@ export class GameService {
     }
 
     public parseGameFromCache(file: TFile): GameItem | null {
+        if (isFileHidden(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)) return null;
         try {
             const cache = this.app.metadataCache.getFileCache(file);
             const metadata = cache?.frontmatter || {};
@@ -428,15 +428,7 @@ export class GameService {
             }
 
             // Parse rating safely
-            let userRating = null;
-            if (metadata.userRating !== undefined && metadata.userRating !== null) {
-                const rating = typeof metadata.userRating === 'string'
-                    ? parseInt(metadata.userRating, 10)
-                    : Number(metadata.userRating);
-                if (!isNaN(rating) && rating >= 1 && rating <= 5) {
-                    userRating = rating as 1 | 2 | 3 | 4 | 5;
-                }
-            }
+            const userRating = parseUserRating(metadata.userRating);
 
             // Parse year safely
             let year: number | null = null;
@@ -460,6 +452,8 @@ export class GameService {
                 imageUrl: imageUrl || rawPoster || DEFAULT_COVER,
                 horizontalImageUrl: horizontalImageUrl || rawHorizontalPoster || null,
                 hasCustomPoster: Boolean(metadata.cm_poster),
+                watchedWith: readNameList(metadata, WATCHED_WITH_KEYS),
+                companions: readCompanions(metadata, readNameList(metadata, WATCHED_WITH_KEYS)),
                 isAdult: isTruthy(metadata.Sex18),
                 status,
                 gameSeries: String(metadata.gameSeries || ''),
@@ -591,7 +585,7 @@ export class GameService {
             if (game.userRating) {
                 stats.withRating++;
                 ratingSum += game.userRating;
-                stats.ratingDistribution[game.userRating]++;
+                stats.ratingDistribution[ratingBucket(game.userRating)]++;
             }
 
             if (game.gameSeries && game.gameSeries !== t('noSeries')) {
@@ -635,6 +629,18 @@ export class GameService {
             frontmatterUpdates.dropped = null;
             frontmatterUpdates.sandbox = null;
             frontmatterUpdates.wishlist = null;
+        }
+        if ('watchedWith' in updates) {
+            const key = WATCHED_WITH_KEYS.find((candidate) => frontmatter && Object.prototype.hasOwnProperty.call(frontmatter, candidate)) ?? WATCHED_WITH_KEYS[0];
+            frontmatterUpdates[key] = serializeNameList(updates.watchedWith);
+        }
+        if ('companions' in updates) Object.assign(frontmatterUpdates, companionFrontmatter(updates.companions ?? []));
+        if ('imageUrl' in updates) {
+            frontmatterUpdates.poster = toStoredImagePath(this.app, updates.imageUrl ?? '') || null;
+        }
+        if ('horizontalImageUrl' in updates) {
+            const horizontal = (updates as { horizontalImageUrl?: string | null }).horizontalImageUrl;
+            frontmatterUpdates.poster_b = toStoredImagePath(this.app, horizontal ?? '') || null;
         }
         if ('year' in updates) frontmatterUpdates.year = updates.year;
         if ('displayName' in updates) {

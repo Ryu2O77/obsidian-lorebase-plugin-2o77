@@ -1,7 +1,12 @@
 import { App, Menu, Modal, setIcon, TFile } from 'obsidian';
 import { DEFAULT_COVER, STATUS_CONFIG } from '../constants';
 import { i18n, t } from '../localization';
-import { MovieItem, RelatedMediaLink, SeriesItem, UserRating, VideoPart, VideoStatus } from '../types';
+import { findRelatedSuggestions } from '../services/media/insights';
+import { CompanionsEditor } from './CompanionsEditor';
+import { paintStars, starValueFromClick } from './halfStars';
+import { completePartsProgress } from '../services/media/seriesProgress';
+import { collectVaultNames, FRANCHISE_KEYS, PLATFORM_KEYS, WATCHED_WITH_KEYS } from '../services/media/people';
+import { Companion, MovieItem, RelatedMediaLink, SeriesItem, UserRating, VideoPart, VideoStatus } from '../types';
 import { GenreEditModal } from './GenreEditModal';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
@@ -9,6 +14,7 @@ import { setupMobileEditor } from './mobileEditor';
 import { bindSourceUrlButton } from './sourceUrlButton';
 import { extractMarkdownSection } from '../services/markdownSections';
 import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
+import { mountPosterEditor, getPosterFolder } from './posterEditor';
 
 type VideoItem = MovieItem | SeriesItem;
 type VideoUpdates = Partial<VideoItem> & Record<string, unknown>;
@@ -25,6 +31,9 @@ export class VideoEditModal extends Modal {
     private title: string;
     private poster: string;
     private horizontalPoster: string;
+    /** Vault path chosen in the editor; null while the image is untouched */
+    private posterStored: string | null = null;
+    private horizontalStored: string | null = null;
     private year: number | null;
     private selectedStatus: VideoStatus;
     private selectedRating: UserRating;
@@ -38,6 +47,10 @@ export class VideoEditModal extends Modal {
     private sourceUrl: string;
     private genres: string[];
     private tags: string[];
+    private watchedWith: string[];
+    private companions: Companion[];
+    private franchise: string[];
+    private companionsEditor?: CompanionsEditor;
 
     private releaseDate: string;
     private runtime: string;
@@ -98,6 +111,9 @@ export class VideoEditModal extends Modal {
         this.sourceUrl = item.sourceUrl ?? '';
         this.genres = this.normalizeList(item.genres ?? []);
         this.tags = this.normalizeList(item.tags ?? []);
+        this.watchedWith = [...(item.watchedWith ?? [])];
+        this.companions = (item.companions ?? []).map((entry) => ({ ...entry }));
+        this.franchise = [...(item.franchise ?? [])];
 
         this.releaseDate = this.normalizeDateInput(item.releaseDate);
         this.runtime = item.runtime ?? '';
@@ -203,6 +219,7 @@ export class VideoEditModal extends Modal {
                             <div class="lorebase-editmode-title-row">
                                 <input class="lorebase-editmode-title-input" data-field="title" type="text" aria-label="${t('templateFieldName')}" />
                             </div>
+                            <div class="lorebase-editmode-original-title" data-role="original-title"></div>
                             <div class="lorebase-editmode-meta-row">
                                 <label class="lorebase-editmode-field">
                                     <span class="lorebase-editmode-field-label">${t('year')}</span>
@@ -250,11 +267,11 @@ export class VideoEditModal extends Modal {
                                     <span class="lorebase-editmode-rating-caption">${t('editPersonalRating')}</span>
                                     <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-ghost lorebase-editmode-btn-tight" data-action="clear-rating">${t('editClear')}</button>
                                 </div>
-                                <div class="lorebase-editmode-stars" data-role="stars"></div>
-                                <div class="lorebase-editmode-rating-meta">
+                                <div class="lorebase-editmode-rating-body">
+                                    <div class="lorebase-editmode-stars" data-role="stars"></div>
                                     <span class="lorebase-editmode-rating-value" data-role="rating-value">0.0 / 5.0</span>
-                                    <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 </div>
+                                <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 <div class="lorebase-editmode-rating-line"><span class="lorebase-editmode-rating-line-fill" data-role="rating-line"></span></div>
                             </div>
                             <div class="lorebase-editmode-play-dates">
@@ -288,6 +305,7 @@ export class VideoEditModal extends Modal {
                                 <h3 class="lorebase-editmode-panel-title">${t('editRelatedMedia')}</h3>
                                 <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-tight" data-action="add-related">${t('editAddRelated')}</button>
                             </div>
+                            <div class="lorebase-editmode-related-suggestions" data-role="related-suggestions"></div>
                             <div class="lorebase-editmode-related-list" data-role="related-media"></div>
                         </section>
 
@@ -301,6 +319,8 @@ export class VideoEditModal extends Modal {
                             <div class="lorebase-editmode-chip-row" data-role="tag-chips"></div>
                             <input class="lorebase-editmode-input lorebase-editmode-tag-input" type="text" data-field="new-tag" placeholder="${t('editTagPlaceholder')}" />
                         </section>
+
+                        <section class="lorebase-editmode-panel lorebase-editmode-companions" data-role="companions-panel"></section>
 
                         <section class="lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-timestamps">
                             <div class="lorebase-editmode-panel-title-row"><h3 class="lorebase-editmode-panel-title">${t('editDates')}</h3></div>
@@ -329,6 +349,7 @@ export class VideoEditModal extends Modal {
                         <button type="button" class="lorebase-editmode-anime-parts-icon-action is-danger" data-action="remove-part" aria-label="${t('editRemovePart')}"></button>
                     </div>
                 </div>
+                <button type="button" class="lorebase-btn lorebase-complete-all" data-action="complete-all-parts">\u2713 ${t('seriesCompleteAll')}</button>
                 <div class="lorebase-editmode-anime-part-summary">
                     <div class="lorebase-editmode-anime-part-stat">
                         <span class="lorebase-editmode-anime-part-stat-label">${t('editTotalEpisodes')}</span>
@@ -436,7 +457,23 @@ export class VideoEditModal extends Modal {
             poster.src = this.poster;
             poster.alt = this.item.displayName;
         }
+
+        const posterCard = poster?.closest<HTMLElement>('.lorebase-editmode-poster-card');
+        if (posterCard && !posterCard.querySelector('.lorebase-poster-editor')) {
+            mountPosterEditor(posterCard, {
+                app: this.app,
+                kind: this.item.type === 'movie' ? 'movies' : 'series',
+                getTitle: () => this.title,
+                getFolder: () => getPosterFolder(this.app),
+                supportsHorizontal: true,
+                getDisplay: (target) => target === 'horizontal' ? this.horizontalPoster : this.poster,
+                onChange: (target, change) => {
+                    if (target === 'horizontal') { this.horizontalPoster = change.display; this.horizontalStored = change.stored; } else { this.poster = change.display; this.posterStored = change.stored; }
+                },
+            });
+        }
         this.setInput(root, '[data-field="title"]', this.title);
+        this.renderOriginalTitle(root);
         this.setInput(root, '[data-field="year"]', this.year);
         this.setInput(root, '[data-field="source-url"]', this.sourceUrl);
         this.setInput(root, '[data-field="summary"]', this.getCurrentNotesValue());
@@ -456,6 +493,7 @@ export class VideoEditModal extends Modal {
         this.renderStars(root);
         this.renderGenreChips(root);
         this.renderTagChips(root);
+        this.mountCompanions(root);
         this.renderPartKindOptions(root);
         this.renderPartStrip(root);
         this.renderActivePartEditor(root);
@@ -500,6 +538,10 @@ export class VideoEditModal extends Modal {
                     this.finished = this.getTodayDateInput();
                     this.finishedDatePicker?.syncInput(this.finished);
                 }
+                if (status === 'completed' && this.item.type === 'series' && this.parts.length) {
+                    this.parts = completePartsProgress(this.parts);
+                    this.refreshPartsUi(root);
+                }
                 this.updateStatusUI(root);
             });
         });
@@ -507,8 +549,8 @@ export class VideoEditModal extends Modal {
 
     private bindRating(root: HTMLElement): void {
         root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.selectedRating = Number(btn.dataset.rating) as UserRating;
+            btn.addEventListener('click', (event) => {
+                this.selectedRating = starValueFromClick(btn, Number(btn.dataset.rating), event);
                 this.updateRatingUI(root);
             });
         });
@@ -567,6 +609,17 @@ export class VideoEditModal extends Modal {
             this.refreshPartsUi(root);
         });
 
+        this.qs<HTMLButtonElement>(root, '[data-action="complete-all-parts"]')?.addEventListener('click', () => {
+            if (!this.parts.length) return;
+            this.parts = completePartsProgress(this.parts);
+            this.selectedStatus = 'completed';
+            if (!this.finished) {
+                this.finished = this.getTodayDateInput();
+                this.finishedDatePicker?.syncInput(this.finished);
+            }
+            this.refreshPartsUi(root);
+            this.updateStatusUI(root);
+        });
         this.qs<HTMLButtonElement>(root, '[data-action="episode-dec"]')?.addEventListener('click', () => {
             const part = this.getActivePart();
             if (!part) return;
@@ -821,6 +874,42 @@ export class VideoEditModal extends Modal {
         });
     }
 
+    /** Small line under the title with the original-language title, only when it differs. */
+    private renderOriginalTitle(root: HTMLElement): void {
+        const el = this.qs<HTMLElement>(root, '[data-role="original-title"]');
+        if (!el) return;
+        const original = this.item.originalTitle?.trim() ?? '';
+        const show = Boolean(original) && original.toLocaleLowerCase() !== this.title.trim().toLocaleLowerCase();
+        el.empty();
+        el.toggleClass('is-hidden', !show);
+        if (show) el.setText(`${t('originalTitleLabel')}: ${original}`);
+    }
+
+    private mountCompanions(root: HTMLElement): void {
+        const host = this.qs<HTMLElement>(root, '[data-role="companions-panel"]');
+        if (!host) return;
+        const labels = new Map(this.getVideoStatusOptions().map((entry) => [entry.status, entry.label]));
+        this.companionsEditor = new CompanionsEditor(host, {
+            showWatchedWith: true,
+            showFranchise: true,
+            showPlatforms: true,
+            platforms: this.item.platforms ?? [],
+            platformSuggestions: collectVaultNames(this.app, PLATFORM_KEYS),
+            watchedWith: this.watchedWith,
+            companions: this.companions,
+            franchise: this.franchise,
+            nameSuggestions: collectVaultNames(this.app, WATCHED_WITH_KEYS),
+            franchiseSuggestions: collectVaultNames(this.app, FRANCHISE_KEYS),
+            statusLabels: {
+                planned: labels.get('planned') ?? 'Planned',
+                watching: labels.get('watching') ?? 'Watching',
+                completed: labels.get('completed') ?? 'Completed',
+                dropped: labels.get('dropped') ?? 'Dropped',
+                paused: labels.get('paused') ?? 'Paused',
+            },
+        });
+    }
+
     private renderTagChips(root: HTMLElement): void {
         this.renderChipList(root, '[data-role="tag-chips"]', this.tags, (value) => {
             this.tags = this.tags.filter((entry) => entry !== value);
@@ -829,6 +918,7 @@ export class VideoEditModal extends Modal {
     }
 
     private renderRelatedMedia(root: HTMLElement): void {
+        this.renderRelatedSuggestions(root);
         const container = this.qs<HTMLElement>(root, '[data-role="related-media"]');
         if (!container) return;
         container.empty();
@@ -860,6 +950,30 @@ export class VideoEditModal extends Modal {
                     this.reorderRelatedMediaInList(displayItems, item.path);
                     this.renderRelatedMedia(root);
                 },
+            });
+        }
+    }
+
+    /** Candidates that share this title's director or franchise, excluding anything already linked. */
+    private renderRelatedSuggestions(root: HTMLElement): void {
+        const host = this.qs<HTMLElement>(root, '[data-role="related-suggestions"]');
+        if (!host) return;
+        host.empty();
+        const linked = new Set([...this.relatedMedia, ...this.incomingRelated].map((entry) => entry.path));
+        const pool = this.relatedCandidates.filter((candidate) => !linked.has(candidate.path));
+        const suggestions = findRelatedSuggestions({ path: this.item.filePath, director: this.director, franchise: this.franchise }, pool);
+        if (!suggestions.length) return;
+        host.createDiv({ cls: 'lorebase-editmode-related-suggestions-label', text: t('editRelatedSuggested') });
+        const row = host.createDiv({ cls: 'lorebase-editmode-related-suggestions-row' });
+        for (const suggestion of suggestions) {
+            const chip = row.createEl('button', {
+                cls: 'lorebase-editmode-chip lorebase-editmode-chip-add',
+                attr: { type: 'button', title: suggestion.title },
+                text: `+ ${suggestion.title}`,
+            });
+            chip.addEventListener('click', () => {
+                this.relatedMedia = this.normalizeRelatedMedia([...this.relatedMedia, suggestion]);
+                this.renderRelatedMedia(root);
             });
         }
     }
@@ -1036,10 +1150,7 @@ export class VideoEditModal extends Modal {
     }
 
     private updateRatingUI(root: HTMLElement): void {
-        root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            const value = Number(btn.dataset.rating ?? '0');
-            btn.toggleClass('is-active', this.selectedRating !== null && value <= this.selectedRating);
-        });
+        paintStars(root, this.selectedRating);
         const numeric = this.selectedRating ?? 0;
         this.setText(root, '[data-role="rating-value"]', `${numeric.toFixed(1)} / 5.0`);
         const line = this.qs<HTMLElement>(root, '[data-role="rating-line"]');
@@ -1289,8 +1400,8 @@ export class VideoEditModal extends Modal {
 
         const updates: VideoUpdates = {
             displayName: this.title,
-            imageUrl: this.poster,
-            horizontalImageUrl: this.horizontalPoster,
+            ...(this.posterStored !== null ? { imageUrl: this.posterStored } : {}),
+            ...(this.horizontalStored !== null ? { horizontalImageUrl: this.horizontalStored } : {}),
             year: this.year,
             userRating: this.selectedRating,
             status,
@@ -1304,6 +1415,13 @@ export class VideoEditModal extends Modal {
             relatedMedia: this.relatedMedia,
             myNotes: this.myNotes,
         };
+        const shared = this.companionsEditor?.getValue();
+        if (shared) {
+            updates.watchedWith = shared.watchedWith;
+            updates.platforms = shared.platforms;
+            updates.companions = shared.companions;
+            updates.franchise = shared.franchise;
+        }
 
         if (this.item.type === 'movie') {
             updates.releaseDate = this.releaseDate;

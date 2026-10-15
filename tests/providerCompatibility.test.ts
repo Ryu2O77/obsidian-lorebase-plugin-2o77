@@ -7,7 +7,7 @@ import { createMockApp } from './helpers/testHelpers';
 describe('provider compatibility matrix', () => {
     it.each<[MediaKind, ProviderId[]]>([
         ['games', ['rawg', 'steam', 'igdb']],
-        ['anime', ['anilist', 'jikan', 'shikimori']],
+        ['anime', ['anilist', 'jikan', 'shikimori', 'tmdb']],
         ['movies', ['tmdb', 'omdb']],
         ['series', ['tmdb', 'tvmaze', 'omdb']],
         ['books', ['hardcover', 'googlebooks']],

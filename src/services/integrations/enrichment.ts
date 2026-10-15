@@ -30,6 +30,8 @@ export interface ProviderSourceSnapshot {
 }
 
 export const SOURCE_SNAPSHOT_FIELD = 'lorebase_source_snapshot';
+/** Note property that remembers the language the provider metadata was loaded in (TMDB). */
+export const METADATA_LANGUAGE_FIELD = 'metadata_language';
 
 const FIELD_ALIASES: Record<string, string[]> = {
     name: ['name', 'Name', 'title', 'Title'],
@@ -197,6 +199,34 @@ export function synchronizeProviderMetadata(
         result.patch[SOURCE_SNAPSHOT_FIELD] = nextSnapshot;
     }
     return result;
+}
+
+/**
+ * When the user picks another metadata language the provider title must replace the current one,
+ * even if the title was edited before (the normal sync protects edited values). Also records the
+ * language so later refreshes keep using it. Returns true when the title changed.
+ */
+export function applyMetadataLanguage(
+    current: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+    merged: EnrichmentMergeResult,
+    language: string
+): boolean {
+    const chosen = language.trim();
+    const stored = typeof current[METADATA_LANGUAGE_FIELD] === 'string' ? String(current[METADATA_LANGUAGE_FIELD]).trim() : '';
+    if (chosen !== stored) {
+        merged.patch[METADATA_LANGUAGE_FIELD] = chosen || null;
+        merged.values[METADATA_LANGUAGE_FIELD] = chosen || null;
+        if (!merged.filledFields.includes(METADATA_LANGUAGE_FIELD)) merged.filledFields.push(METADATA_LANGUAGE_FIELD);
+    }
+    const title = typeof incoming.name === 'string' ? incoming.name.trim() : '';
+    if (chosen === stored || !title) return false;
+    const key = findExistingAlias(current, 'name') ?? 'title';
+    if (valuesEqual(current[key], title)) return false;
+    merged.patch[key] = title;
+    merged.values[key] = title;
+    if (!merged.filledFields.includes(key)) merged.filledFields.push(key);
+    return true;
 }
 
 export function toVideoPartsFrontmatter(parts: IntegrationVideoPart[] | undefined): Record<string, unknown>[] {

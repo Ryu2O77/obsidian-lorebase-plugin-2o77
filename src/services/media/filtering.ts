@@ -4,6 +4,7 @@ import {
     FilterableMediaItem,
     getViewFieldValue,
     matchesFilterRule,
+    matchesLocalSearch,
     parseDateValue,
 } from './libraryViewState';
 
@@ -42,7 +43,7 @@ export function filterAndSortMedia<T extends FilterableMediaItem>(
         const item = items[i];
         if (!item) continue;
 
-        if (isSearching && !(item.nameLower && item.nameLower.includes(searchLower))) continue;
+        if (isSearching && !matchesLocalSearch(item, searchLower)) continue;
         if (!isVisible(item, hasGlobalFilters)) continue;
         if (statusSet && !statusSet.has(item.status)) continue;
         if (filter.favoriteOnly && !item.favorite) continue;

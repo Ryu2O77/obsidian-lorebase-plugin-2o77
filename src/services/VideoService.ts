@@ -1,12 +1,16 @@
 import { App, TFile, TFolder } from 'obsidian';
+import { isFileHidden } from './media/hiddenFiles';
 import { FilterState, MovieItem, SeriesItem, SortField, SortOrder, VideoPart, VideoStats, VideoStatus } from '../types';
 import { DEFAULT_COVER } from '../constants';
 import { MetadataService } from './MetadataService';
 import { filterAndSortMedia } from './media/filtering';
 import { extractSimpleFrontmatter } from './media/libraryViewState';
-import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia } from './media/parsers';
+import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia, ratingBucket, resolveExactRating } from './media/parsers';
 import { collectFieldTags, collectTags, getAllMarkdownFiles, isTruthy, mapInFrameBatches } from './media/serviceUtils';
+import { completePartsProgress, sumEpisodes } from './media/seriesProgress';
+import { FRANCHISE_KEYS, PLATFORM_KEYS, WATCHED_WITH_KEYS, companionFrontmatter, readCompanions, readNameList, serializeNameList } from './media/people';
 import { upsertMarkdownSection } from './markdownSections';
+import { toStoredImagePath } from './media/imagePaths';
 
 export type VideoMediaType = 'movie' | 'series';
 export type VideoItem = MovieItem | SeriesItem;
@@ -55,6 +59,7 @@ export class VideoService {
     }
 
     parseFromCache(file: TFile): VideoItem | null {
+        if (isFileHidden(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)) return null;
         try {
             const cache = this.app.metadataCache.getFileCache(file);
             const metadata = cache?.frontmatter || {};
@@ -83,7 +88,7 @@ export class VideoService {
                 year: parseYear(metadata.year),
                 description,
                 summary: description,
-                userRating: parseUserRating(metadata.userRating ?? metadata.rating_user),
+                userRating: resolveExactRating(parseUserRating(metadata.userRating ?? metadata.rating_user), metadata.rating_exact),
                 favorite: isTruthy(metadata.favorite),
                 poster,
                 imageUrl: verticalImageUrl || poster || DEFAULT_COVER,
@@ -96,6 +101,11 @@ export class VideoService {
                 sourceUrl: this.readText(metadata, ['url', 'source_url']),
                 started: this.readDateText(metadata, ['started', 'dateStarted', 'start_date']),
                 finished: this.readDateText(metadata, ['finished', 'dateFinished', 'finish_date', 'dateWatched', 'watched']),
+                originalTitle: this.readText(metadata, ['original_title', 'originalTitle']) || undefined,
+                watchedWith: readNameList(metadata, WATCHED_WITH_KEYS),
+                companions: readCompanions(metadata, readNameList(metadata, WATCHED_WITH_KEYS)),
+                franchise: readNameList(metadata, FRANCHISE_KEYS),
+                platforms: readNameList(metadata, PLATFORM_KEYS),
                 integrationProvider: this.normalizeProvider(this.readText(metadata, ['integration_provider'])),
                 integrationId: this.readText(metadata, ['integration_id']),
                 parts,
@@ -175,7 +185,8 @@ export class VideoService {
             if (item.userRating) {
                 stats.withRating++;
                 ratingSum += item.userRating;
-                stats.ratingDistribution[item.userRating] = (stats.ratingDistribution[item.userRating] || 0) + 1;
+                const bucket = ratingBucket(item.userRating);
+                stats.ratingDistribution[bucket] = (stats.ratingDistribution[bucket] || 0) + 1;
             }
         }
         stats.avgRating = stats.withRating > 0 ? Math.round((ratingSum / stats.withRating) * 10) / 10 : 0;
@@ -197,18 +208,25 @@ export class VideoService {
         if ('year' in updates) frontmatterUpdates.year = updates.year;
         if ('description' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['plot', 'summary', 'description'], updates.description);
         if ('summary' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['plot', 'summary', 'description'], updates.summary);
-        if ('poster' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], updates.poster);
-        if ('imageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], updates.imageUrl === DEFAULT_COVER ? '' : updates.imageUrl);
-        if ('horizontalImageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster_b', 'image_b', 'horizontal_poster'], updates.horizontalImageUrl);
+        if ('poster' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], this.toStoredImage(updates.poster));
+        if ('imageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], this.toStoredImage(updates.imageUrl === DEFAULT_COVER ? '' : updates.imageUrl));
+        if ('horizontalImageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster_b', 'image_b', 'horizontal_poster'], this.toStoredImage(updates.horizontalImageUrl));
         if ('genres' in updates) this.updateListField(frontmatterUpdates, frontmatter, ['genres', 'genre'], updates.genres);
         if ('tags' in updates) this.updateListField(frontmatterUpdates, frontmatter, ['tags', 'tag'], updates.tags, true);
         if ('rating' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['rating', 'scoreImdb', 'imdbRating'], updates.rating);
         if ('status' in updates) frontmatterUpdates.status = updates.status;
-        if ('userRating' in updates) frontmatterUpdates.userRating = updates.userRating;
+        if ('userRating' in updates) {
+            frontmatterUpdates.userRating = updates.userRating;
+            frontmatterUpdates.rating_exact = null;
+        }
         if ('favorite' in updates) frontmatterUpdates.favorite = updates.favorite;
         if ('sourceUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['url', 'source_url'], updates.sourceUrl);
         if ('started' in updates) frontmatterUpdates.started = this.normalizeDateString(String(updates.started ?? '')) || null;
         if ('finished' in updates) frontmatterUpdates.finished = this.normalizeDateString(String(updates.finished ?? '')) || null;
+        if ('watchedWith' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...WATCHED_WITH_KEYS])] = serializeNameList(updates.watchedWith);
+        if ('companions' in updates) Object.assign(frontmatterUpdates, companionFrontmatter(updates.companions ?? []));
+        if ('franchise' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...FRANCHISE_KEYS])] = serializeNameList(updates.franchise);
+        if ('platforms' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...PLATFORM_KEYS])] = serializeNameList(updates.platforms);
         if ('releaseDate' in updates) this.updateTextField(
             frontmatterUpdates,
             frontmatter,
@@ -246,6 +264,28 @@ export class VideoService {
             const parts = Array.isArray(updates.parts) ? updates.parts : item.parts;
             const activePart = parts?.find((part) => part.id === activeId);
             if (activePart?.seasonNumber !== undefined) frontmatterUpdates.season_current = activePart.seasonNumber;
+        }
+
+        if (item.type === 'series' && updates.status === 'completed' && !('parts' in updates)) {
+            const parts = item.parts ?? [];
+            if (parts.length) {
+                const completed = completePartsProgress(parts);
+                frontmatterUpdates.series_parts = this.serializeParts(completed);
+                const sums = sumEpisodes(completed);
+                if (sums.total) {
+                    frontmatterUpdates.episode_current = sums.current;
+                    frontmatterUpdates.episode_total = sums.total;
+                }
+                const active = completed.find((part) => part.id === (item.activePartId ?? ''));
+                Object.assign(item, {
+                    parts: completed,
+                    episodeCurrent: active?.episodeCurrent ?? sums.current,
+                    episodeTotal: active?.episodeTotal ?? sums.total,
+                });
+            } else if (item.episodeTotal && item.episodeTotal > 0) {
+                frontmatterUpdates.episode_current = item.episodeTotal;
+                item.episodeCurrent = item.episodeTotal;
+            }
         }
 
         await this.metadataService.updateMetadata(file, frontmatterUpdates);
@@ -359,6 +399,11 @@ export class VideoService {
 
     private preferredKey(frontmatter: Record<string, unknown> | null | undefined, keys: string[]): string {
         return keys.find((key) => this.hasKey(frontmatter, key)) ?? keys[0];
+    }
+
+    /** Never store a session-specific app:// URL in a note; keep the vault path instead. */
+    private toStoredImage(value: unknown): string {
+        return toStoredImagePath(this.app, value === null || value === undefined ? '' : String(value));
     }
 
     private updateTextField(

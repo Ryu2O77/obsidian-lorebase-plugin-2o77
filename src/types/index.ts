@@ -123,10 +123,15 @@ export interface RelatedMediaLink {
     path: string;
     title: string;
     imageUrl?: string | null;
+    /** Director (movies/series), for auto-suggesting related media by shared director */
+    director?: string | null;
+    /** Franchise values, for auto-suggesting related media by shared franchise */
+    franchise?: string[];
 }
 
 /** User rating from 1-5 */
-export type UserRating = 1 | 2 | 3 | 4 | 5 | null;
+/** 1..5 stars. Movies, series and books also allow half steps (e.g. 4.5). */
+export type UserRating = number | null;
 
 /** Provider/community score stored in note frontmatter */
 export interface CommunityRating {
@@ -142,7 +147,6 @@ export type CardSize = 'small' | 'medium' | 'large';
 export type CardOrientation = 'vertical' | 'horizontal';
 
 /** Card visual style */
-export type CardStyle = 'hover' | 'progress';
 
 /** Sort field options. dateCompleted is retained as a persisted-settings alias. */
 export type SortField =
@@ -196,7 +200,17 @@ export interface FieldDefinition {
     options?: Array<{ value: string; label: string }>;
 }
 
-export type GroupMode = 'none' | 'series' | 'finishedMonth' | 'finishedYear';
+/** Status a companion (e.g. a partner watching along) has for an item */
+export type CompanionStatus = 'planned' | 'watching' | 'completed' | 'dropped' | 'paused';
+
+/** A person an item is shared with, plus their own status and 0.5-step rating */
+export interface Companion {
+    name: string;
+    status: CompanionStatus | null;
+    rating: number | null;
+}
+
+export type GroupMode = 'none' | 'series' | 'franchise' | 'finishedMonth' | 'finishedYear';
 
 export interface GroupSpec {
     mode: GroupMode;
@@ -224,7 +238,17 @@ export interface SavedLibraryView {
 }
 
 /** View mode */
-export type ViewMode = 'grid' | 'horizontal';
+export type ViewMode = 'grid' | 'horizontal' | 'table';
+
+/** Table view layout of one media library: chosen columns (in order), their widths and text wrapping */
+export interface TableViewConfig {
+    /** Column keys in display order: `b:*` built-in, `p:<name>:status|rating` per person, `r:<key>` any note property */
+    columns: string[];
+    /** Width in px per column key */
+    widths: Record<string, number>;
+    /** Wrap long text instead of cutting it */
+    wrap: boolean;
+}
 
 /** Supported languages */
 export type Language = 'en' | 'ru' | 'uk';
@@ -277,6 +301,13 @@ interface OverlayTextVisibility {
     year: boolean;
     format: boolean;
     description: boolean;
+}
+
+/** Card parts the user can hide quickly from the size menu */
+export interface HiddenCardParts {
+    status?: boolean;
+    rating?: boolean;
+    companions?: boolean;
 }
 
 /** Per-badge display settings */
@@ -344,6 +375,16 @@ interface BaseMediaItem {
     started?: string | null;
     /** Date finished in YYYY-MM-DD form */
     finished?: string | null;
+    /** Title in its original language (frontmatter `original_title`), shown in the editor only */
+    originalTitle?: string;
+    /** People this item was watched with (frontmatter `watched_with`) */
+    watchedWith?: string[];
+    /** Per-person progress for people listed in `watchedWith` (`<name>_status`, `<name>_rating`) */
+    companions?: Companion[];
+    /** Franchises / universes this item belongs to (frontmatter `franchise`) */
+    franchise?: string[];
+    /** Platforms / services this item is on (frontmatter `platform`), e.g. Stremio, Kindle */
+    platforms?: string[];
     /** Scalar frontmatter fields available to the view rule engine */
     rawFields?: Record<string, string | number | boolean | string[] | null>;
 }
@@ -427,7 +468,7 @@ export interface AnimeItem extends BaseMediaItem {
     /** Optional source URL */
     sourceUrl?: string | null;
     /** Metadata provider used to create/update anime composition */
-    integrationProvider?: 'anilist' | 'jikan' | 'shikimori' | null;
+    integrationProvider?: 'anilist' | 'jikan' | 'shikimori' | 'tmdb' | null;
     /** Provider-specific anime id used to refresh anime composition */
     integrationId?: string | null;
     /** Trackable seasons/OVA/specials for this title */
@@ -534,17 +575,25 @@ export type MediaItem = GameItem | AnimeItem | MovieItem | SeriesItem | BookItem
 // =============================================================================
 
 /** Library-specific settings */
-interface LibrarySettings {
+export interface LibrarySettings {
     /** Folder path in vault */
     folderPath: string;
     /** Number of columns in grid */
     columns: number;
     /** Card size */
     cardSize: CardSize;
-    /** Card visual style */
-    cardStyle: CardStyle;
+    /** Show the hover overlay (title/year/description) when hovering the poster */
+    hoverPreview: boolean;
+    /** Show a progress/title bar under the poster. No-op for movies/games (nothing to show there). */
+    progressFooter: boolean;
+    /** Show the title (and year) under the poster; independent of hoverPreview/progressFooter */
+    titleBelow: boolean;
     /** Use custom card dimensions instead of preset sizes */
     customCardSize: boolean;
+    /** Quick size multiplier (0.5–1.8) applied on top of the preset/custom size, aspect ratio preserved */
+    cardScale: number;
+    /** Card parts hidden from the quick size menu (status badge, rating badge, "Status for" strip) */
+    hiddenCardParts?: HiddenCardParts;
     /** Vertical card minimum width (also used for adaptive columns) */
     customCardMinWidth: number;
     /** Vertical card minimum height */
@@ -563,6 +612,10 @@ interface LibrarySettings {
     bookCoverEffect: boolean;
     /** Card orientation */
     orientation: CardOrientation;
+    /** Show this library as a table instead of cards */
+    tableMode?: boolean;
+    /** Table view columns and widths */
+    table?: TableViewConfig;
     /** Current sort field */
     sortField: SortField;
     /** Current sort order */
@@ -589,6 +642,14 @@ export interface LorebaseSettings {
     showAddModeChoice: boolean;
     /** Primary action when a library card is clicked */
     cardClickAction: CardClickAction;
+    /** Colors chosen for table options (tags, genres, platforms...): column key -> lowercase value -> color */
+    tableOptionColors?: Record<string, Record<string, string>>;
+    /** Category shown when the library opens: a fixed one or the last one used */
+    startMediaType?: MediaType | 'last';
+    /** Last category opened (used when startMediaType is 'last') */
+    lastMediaType?: MediaType;
+    /** Notes that live in a library folder but must not show up as cards */
+    hiddenFiles: { patterns: string; showHidden: boolean };
     /** Legacy fallback date format in status badge while sorting by completion date */
     completionDateBadgeFormat: CompletionDateBadgeFormat;
     /** Date format in status badge while sorting by completion date, per media type */
@@ -811,18 +872,26 @@ export interface SteamSyncSettings {
     autoSyncPlaytimeOnStartup: boolean;
 }
 
+/** Result of automatically linking one item to a metadata provider */
+export interface AutoFillOutcome {
+    status: 'linked' | 'review' | 'notfound' | 'failed';
+    /** Best search result title (for review / not linked items) */
+    candidate?: string;
+}
+
 /** Interface for the main plugin class (decourples circular dependency) */
 export interface LorebasePluginInterface {
     settings: LorebaseSettings;
     app: App;
     saveSettings(): Promise<void>;
     showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void): void;
-    showStatsModal(stats: GameStats | AnimeStats, mediaType: MediaType): void;
+    showStatsModal(stats: GameStats | AnimeStats, mediaType: MediaType, items?: MediaItem[]): void;
     showDeleteModal(game: MediaItem, onConfirm: () => Promise<void>): void;
     addMediaItem(mediaType: MediaType): void;
     runSteamSync(): Promise<void>;
     runNoteImport(): Promise<void>;
     enrichMediaItem(item: MediaItem, relink?: boolean, onSave?: () => void): Promise<boolean>;
+    autoFillMediaItem(item: MediaItem, acceptFirst: boolean): Promise<AutoFillOutcome>;
     refreshViews(): void;
     getGameService(): GameService | null;
     getAnimeService(): AnimeService | null;

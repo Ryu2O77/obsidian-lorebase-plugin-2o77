@@ -1,4 +1,11 @@
+import type { HiddenCardParts } from '../../types';
 import { FilterState, LibraryViewState, MediaType, SortField, SortOrder, ViewMode } from '../../types';
+
+export interface CardStyleFlags {
+    hoverPreview: boolean;
+    progressFooter: boolean;
+    titleBelow: boolean;
+}
 
 export interface ToolbarCallbacks {
     onSortChange: (field: SortField, order: SortOrder) => void;
@@ -6,6 +13,8 @@ export interface ToolbarCallbacks {
     onSearch: (term: string) => void;
     onAdd: () => void;
     onRandom: () => void;
+    onToggleSelection?: () => void;
+    onTogether?: () => void;
     onStats: () => void;
     onSettings: () => void;
     onViewModeChange: (mode: ViewMode) => void;
@@ -17,6 +26,11 @@ export interface ToolbarCallbacks {
     onDeleteSavedView: (id: string) => void;
     onResetView: () => void;
     onMediaTypeChange: (mediaType: MediaType) => void;
+    /** Poster size slider in the view-mode dropdown (grid/horizontal only; scale is 0.6\u20131.6) */
+    onCardScaleChange?: (scale: number) => void;
+    onHiddenCardPartsChange?: (parts: HiddenCardParts) => void;
+    /** Quick shortcuts for Hover preview / Progress footer / Title below in the view-mode dropdown */
+    onCardStyleFlagsChange?: (flags: CardStyleFlags) => void;
 }
 
 export type TagSummary = {

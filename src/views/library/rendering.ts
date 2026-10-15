@@ -61,7 +61,8 @@ export function renderRandomCard(params: RenderRandomCardParams): void {
 export function applyViewModeClass(container: HTMLElement, viewMode: ViewMode): void {
     container.removeClass(
         'lorebase-view-mode-grid',
-        'lorebase-view-mode-horizontal'
+        'lorebase-view-mode-horizontal',
+        'lorebase-view-mode-table'
     );
     container.addClass(`lorebase-view-mode-${viewMode}`);
 }

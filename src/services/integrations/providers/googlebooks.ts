@@ -4,6 +4,8 @@ import { JsonFetcher, asArray, asObject, getArray, getObject, getString, mapStri
 interface GoogleBooksOptions {
     page?: number;
     pageSize?: number;
+    /** Only list books published in this language ("es", "es-ES"...); empty means any language */
+    language?: string;
 }
 
 function withHasNext<T>(items: T[], hasNext: boolean): T[] {
@@ -31,6 +33,8 @@ export async function searchGoogleBooks(
     url.searchParams.set('maxResults', String(Math.min(pageSize, 40)));
     url.searchParams.set('printType', 'books');
     url.searchParams.set('projection', 'lite');
+    const langRestrict = (options.language ?? '').trim().split('-')[0].toLowerCase();
+    if (/^[a-z]{2}$/.test(langRestrict)) url.searchParams.set('langRestrict', langRestrict);
     if (apiKey.trim()) url.searchParams.set('key', apiKey.trim());
 
     const root = asObject(await fetchJson(url.toString(), {

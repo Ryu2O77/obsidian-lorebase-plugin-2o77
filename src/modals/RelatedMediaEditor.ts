@@ -2,20 +2,29 @@ import { App, Modal } from 'obsidian';
 import { DEFAULT_COVER } from '../constants';
 import { t } from '../localization';
 import type { RelatedMediaLink } from '../types';
+import { findRelatedSuggestions } from '../services/media/insights';
 
 export class RelatedMediaEditor {
     private values: RelatedMediaLink[];
     private candidates: RelatedMediaLink[];
     private incoming: RelatedMediaLink[];
     private draggedPath: string | null = null;
+    private readonly currentPath: string;
+    private readonly currentDirector?: string | null;
+    private readonly currentFranchise?: string[];
 
     constructor(
         private app: App,
         currentPath: string,
         values: RelatedMediaLink[] = [],
         candidates: RelatedMediaLink[] = [],
-        incoming: RelatedMediaLink[] = []
+        incoming: RelatedMediaLink[] = [],
+        currentDirector?: string | null,
+        currentFranchise?: string[]
     ) {
+        this.currentPath = currentPath;
+        this.currentDirector = currentDirector;
+        this.currentFranchise = currentFranchise;
         this.values = normalizeRelatedMedia(values);
         this.candidates = normalizeRelatedMedia(candidates)
             .filter((candidate) => candidate.path !== currentPath);
@@ -36,11 +45,39 @@ export class RelatedMediaEditor {
         this.render(root);
     }
 
+    /** Candidates that share this item's director or franchise, excluding anything already linked. */
+    private renderSuggestions(root: HTMLElement): void {
+        const host = root.querySelector<HTMLElement>('[data-role="related-suggestions"]');
+        if (!host) return;
+        host.empty();
+        const linked = new Set([...this.values, ...this.incoming].map((entry) => entry.path));
+        const pool = this.candidates.filter((candidate) => !linked.has(candidate.path));
+        const suggestions = findRelatedSuggestions(
+            { path: this.currentPath, director: this.currentDirector, franchise: this.currentFranchise },
+            pool
+        );
+        if (!suggestions.length) return;
+        host.createDiv({ cls: 'lorebase-editmode-related-suggestions-label', text: t('editRelatedSuggested') });
+        const row = host.createDiv({ cls: 'lorebase-editmode-related-suggestions-row' });
+        for (const suggestion of suggestions) {
+            const chip = row.createEl('button', {
+                cls: 'lorebase-editmode-chip lorebase-editmode-chip-add',
+                attr: { type: 'button', title: suggestion.title },
+                text: `+ ${suggestion.title}`,
+            });
+            chip.addEventListener('click', () => {
+                this.values = normalizeRelatedMedia([...this.values, suggestion]);
+                this.render(root);
+            });
+        }
+    }
+
     getValue(): RelatedMediaLink[] {
         return this.values.map((item) => ({ ...item }));
     }
 
     private render(root: HTMLElement): void {
+        this.renderSuggestions(root);
         const container = root.querySelector<HTMLElement>('[data-role="related-media"]');
         if (!container) return;
         container.empty();

@@ -76,9 +76,16 @@ export async function getMangaDexDetails(fetchJson: JsonFetcher, id: string): Pr
     const parts = await fetchMangaDexAggregate(fetchJson, id);
     const title = pickLocalized(getObject(attributes, 'title')) || 'Untitled';
 
+    const originalLanguage = getString(attributes, 'originalLanguage');
+    const altTitles = getArray(attributes, 'altTitles');
+    const originalFromAlt = altTitles
+        .map((entry) => getString(asObject(entry), originalLanguage))
+        .find((value) => value.trim()) ?? '';
+    const originalTitle = (getString(getObject(attributes, 'title'), originalLanguage) || originalFromAlt).trim();
     return {
         kind: 'manga',
         name: title,
+        originalTitle: originalTitle && originalTitle !== title ? originalTitle : undefined,
         description: stripHtml(pickLocalized(getObject(attributes, 'description'))),
         poster: cover,
         posterHorizontal: cover,

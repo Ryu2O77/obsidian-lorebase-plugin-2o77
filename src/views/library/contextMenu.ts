@@ -2,7 +2,10 @@ import { Menu, MenuItem } from 'obsidian';
 import { AnimeItem, BookItem, GameItem, MediaItem, MediaStatus, MovieItem, RatingBadgeMode, ReadingItem, SeriesItem } from '../../types';
 import { FILTER_ICON_MAP, RATING_CONFIG, RATING_EMOJI, STATUS_ICON_MAP } from '../../constants';
 import { t } from '../../localization';
-import { incrementAnimeEpisode, incrementMangaChapter } from './progressActions';
+import { completeAllAnime, completeAllBook, completeAllManga, incrementAnimeEpisode, incrementMangaChapter } from './progressActions';
+import { getCompanionStatusLabels } from './companionLabels';
+import { buildMassUpdates, MassEditChanges } from './massEdit';
+import { COMPANION_STATUSES, parseNameList } from '../../services/media/people';
 
 type MenuItemWithSubmenu = MenuItem & { setSubmenu: () => Menu };
 
@@ -21,6 +24,9 @@ export interface MediaContextMenuDeps {
     updateGame: (game: GameItem, updates: Partial<GameItem>) => void;
     updateVideo?: (item: MovieItem | SeriesItem, updates: Partial<MovieItem | SeriesItem>) => void;
     updateReading?: (item: ReadingItem, updates: Partial<ReadingItem>) => void;
+    onHide?: (item: MediaItem, hidden: boolean) => void;
+    getKnownPeople?: () => string[];
+    promptPerson?: () => Promise<string | null>;
 }
 
 export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps: MediaContextMenuDeps): void {
@@ -74,6 +80,22 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
                             deps.updateGame(item, { userRating: rating.value });
                         }
                     });
+            });
+        }
+
+        // Half stars are available for every category.
+        sub.addSeparator();
+        for (const half of [4.5, 3.5, 2.5, 1.5, 0.5]) {
+            sub.addItem((subItem: MenuItem) => {
+                subItem.setTitle(`\u2605 ${half}`).onClick(() => {
+                    if (deps.isDestroyed()) return;
+                    item.userRating = half;
+                    deps.onItemMutated(item, ['userRating']);
+                    if (item.type === 'anime') deps.updateAnime(item, { userRating: half });
+                    else if (item.type === 'movie' || item.type === 'series') deps.updateVideo?.(item, { userRating: half });
+                    else if (item.type === 'book' || item.type === 'manga') deps.updateReading?.(item, { userRating: half });
+                    else deps.updateGame(item, { userRating: half });
+                });
             });
         }
 
@@ -213,6 +235,8 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
         });
     }
 
+    addCompanionMenus(menu, item, deps);
+
     menu.addSeparator();
 
     if (deps.onSourceAction) {
@@ -238,6 +262,51 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
             });
         }
         menu.addSeparator();
+    }
+
+    if (item.type === 'anime') {
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(t('seriesCompleteAll')).setIcon('check-check').onClick(() => {
+                if (deps.isDestroyed()) return;
+                const mutation = completeAllAnime(item);
+                deps.onItemMutated(item, mutation.changedFields);
+                deps.updateAnime(item, mutation.updates);
+            });
+        });
+    }
+
+    if (item.type === 'manga') {
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(t('mangaCompleteAll')).setIcon('check-check').onClick(() => {
+                if (deps.isDestroyed()) return;
+                const mutation = completeAllManga(item);
+                deps.onItemMutated(item, mutation.changedFields);
+                deps.updateReading?.(item, mutation.updates);
+            });
+        });
+    }
+
+    if (item.type === 'book') {
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(t('bookCompleteAll')).setIcon('check-check').onClick(() => {
+                if (deps.isDestroyed()) return;
+                const mutation = completeAllBook(item);
+                deps.onItemMutated(item, mutation.changedFields);
+                deps.updateReading?.(item, mutation.updates);
+            });
+        });
+    }
+
+    if (item.type === 'series') {
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(t('seriesCompleteAll')).setIcon('check-check').onClick(() => {
+                if (deps.isDestroyed()) return;
+                item.status = 'completed';
+                if (!item.finished) item.finished = getTodayDateInput();
+                deps.onItemMutated(item, ['status', 'finished']);
+                deps.updateVideo?.(item, { status: 'completed', finished: item.finished });
+            });
+        });
     }
 
     menu.addItem((menuItem) => {
@@ -272,6 +341,18 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
             });
     });
 
+    if (deps.onHide) {
+        const hidden = item.rawFields?.lorebase_hidden === true;
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(hidden ? t('contextUnhide') : t('contextHide'))
+                .setIcon(hidden ? 'eye' : 'eye-off')
+                .onClick(() => {
+                    if (deps.isDestroyed()) return;
+                    deps.onHide?.(item, !hidden);
+                });
+        });
+    }
+
     menu.addItem((menuItem) => {
         menuItem.setTitle(t('contextDelete'))
             .setIcon('trash-2')
@@ -282,6 +363,92 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
     });
 
     menu.showAtPosition({ x, y });
+}
+
+function applyCompanionChange(
+    item: MediaItem,
+    change: MassEditChanges,
+    deps: MediaContextMenuDeps
+): void {
+    if (deps.isDestroyed()) return;
+    const updates = buildMassUpdates(item, change);
+    const fields = Object.keys(updates);
+    if (!fields.length) return;
+    Object.assign(item, updates);
+    deps.onItemMutated(item, fields);
+    if (item.type === 'game') deps.updateGame(item, updates as Partial<GameItem>);
+    else if (item.type === 'anime') deps.updateAnime(item, updates as Partial<AnimeItem>);
+    else if (item.type === 'book' || item.type === 'manga') deps.updateReading?.(item, updates as Partial<ReadingItem>);
+    else deps.updateVideo?.(item, updates as Partial<MovieItem | SeriesItem>);
+}
+
+/** "Status for" people toggles, plus status and rating pickers for each person listed. */
+function addCompanionMenus(menu: Menu, item: MediaItem, deps: MediaContextMenuDeps): void {
+    const statusLabels = getCompanionStatusLabels(item.type);
+    const same = (a: string, b: string): boolean => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+    const listed = item.watchedWith ?? [];
+
+    menu.addItem((menuItem) => {
+        const host = menuItem as MenuItemWithSubmenu;
+        host.setTitle(t('contextWatchedWith')).setIcon('users');
+        const sub = host.setSubmenu();
+        for (const name of parseNameList([...(deps.getKnownPeople?.() ?? []), ...listed])) {
+            const active = listed.some((entry) => same(entry, name));
+            sub.addItem((subItem: MenuItem) => {
+                subItem.setTitle(name).setChecked(active).onClick(() => {
+                    applyCompanionChange(item, active ? { watchedWithRemove: [name] } : { watchedWithAdd: [name] }, deps);
+                });
+            });
+        }
+        const prompt = deps.promptPerson;
+        if (prompt) {
+            sub.addItem((subItem: MenuItem) => {
+                subItem.setTitle(t('contextNewPerson')).setIcon('plus').onClick(() => {
+                    void prompt().then((name) => {
+                        if (name) applyCompanionChange(item, { watchedWithAdd: [name] }, deps);
+                    });
+                });
+            });
+        }
+    });
+
+    for (const name of listed) {
+        const current = (item.companions ?? []).find((entry) => same(entry.name, name));
+        const currentStatusLabel = current?.status ? statusLabels[current.status] : undefined;
+        menu.addItem((menuItem) => {
+            const host = menuItem as MenuItemWithSubmenu;
+            const statusTitle = `${name} \u00B7 ${t('contextPersonStatus')}`;
+            host.setTitle(currentStatusLabel ? `${statusTitle} (${currentStatusLabel})` : statusTitle).setIcon('user-check');
+            const sub = host.setSubmenu();
+            for (const status of COMPANION_STATUSES) {
+                sub.addItem((subItem: MenuItem) => {
+                    subItem.setTitle(statusLabels[status]).setChecked(current?.status === status)
+                        .onClick(() => applyCompanionChange(item, { person: { name, status } }, deps));
+                });
+            }
+            sub.addItem((subItem: MenuItem) => {
+                subItem.setTitle(`${String.fromCodePoint(0x1f9f9)} ${t('contextClear')}`)
+                    .onClick(() => applyCompanionChange(item, { person: { name, status: null } }, deps));
+            });
+        });
+        menu.addItem((menuItem) => {
+            const host = menuItem as MenuItemWithSubmenu;
+            const ratingTitle = `${name} \u00B7 ${t('contextPersonRating')}`;
+            host.setTitle(current?.rating ? `${ratingTitle} (${current.rating} \u2605)` : ratingTitle).setIcon('star-half');
+            const sub = host.setSubmenu();
+            for (let step = 10; step >= 1; step--) {
+                const rating = step / 2;
+                sub.addItem((subItem: MenuItem) => {
+                    subItem.setTitle(`${rating} \u2605`).setChecked(current?.rating === rating)
+                        .onClick(() => applyCompanionChange(item, { person: { name, rating } }, deps));
+                });
+            }
+            sub.addItem((subItem: MenuItem) => {
+                subItem.setTitle(`${String.fromCodePoint(0x1f9f9)} ${t('contextClear')}`)
+                    .onClick(() => applyCompanionChange(item, { person: { name, rating: null } }, deps));
+            });
+        });
+    }
 }
 
 function getTodayDateInput(): string {

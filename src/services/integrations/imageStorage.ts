@@ -4,6 +4,7 @@ import type { MediaKind } from './types';
 import { sanitizeFileName } from './templateUtils';
 import { getAllMarkdownFiles } from '../media/serviceUtils';
 import { fetchBinary } from './shared';
+import { isResourceUrl, toStoredImagePath } from '../media/imagePaths';
 
 type ImageValueKey = 'Poster' | 'PosterHorizontal' | 'image' | 'ImageHorizontal';
 
@@ -136,6 +137,93 @@ export async function saveManualImageFileToVault(
     await app.vault.adapter.writeBinary(filePath, await file.arrayBuffer());
 
     return filePath;
+}
+
+/** Writes image bytes into the vault (creating or updating a real vault file) and returns its vault path. */
+async function writeVaultImage(
+    app: App,
+    data: ArrayBuffer,
+    extension: string,
+    params: { baseFolder: string; kind: MediaKind; title: string; label: string }
+): Promise<string> {
+    const baseFolder = normalizeVaultPath(params.baseFolder || 'files/lorebase/images');
+    const folderPath = normalizeVaultPath(`${baseFolder}/${params.kind}`);
+    const titlePart = sanitizeFileName(params.title) || 'Untitled';
+    const labelPart = sanitizeFileName(params.label) || 'Image';
+    await ensureFolder(app, folderPath);
+
+    // Never overwrite: the old file may still be shown from cache, and the user may want it back.
+    let filePath = normalizeVaultPath(`${folderPath}/${titlePart} - ${labelPart}.${extension}`);
+    for (let counter = 2; app.vault.getAbstractFileByPath(filePath); counter++) {
+        filePath = normalizeVaultPath(`${folderPath}/${titlePart} - ${labelPart} (${counter}).${extension}`);
+    }
+    await app.vault.createBinary(filePath, data);
+    return filePath;
+}
+
+/** Saves an image chosen in the editor (upload from disk) and returns its vault path. */
+export async function saveEditorImageFile(
+    app: App,
+    file: File,
+    params: { baseFolder: string; kind: MediaKind; title: string; label: string }
+): Promise<string> {
+    return writeVaultImage(app, await file.arrayBuffer(), getFileImageExtension(file), params);
+}
+
+/** Downloads an image URL typed in the editor into the vault and returns its vault path. */
+export async function saveEditorImageUrl(
+    app: App,
+    url: string,
+    params: { baseFolder: string; kind: MediaKind; title: string; label: string }
+): Promise<string> {
+    const response = await fetchBinary(url.trim());
+    return writeVaultImage(app, response.arrayBuffer, getImageExtension(url, response.headers?.['content-type']), params);
+}
+
+/**
+ * Notes written by older versions may hold a session-specific `app://<hash>/...` URL in their
+ * image fields, which stops working after Obsidian restarts. Rewrites them to vault paths.
+ */
+export async function repairResourceUrlImages(
+    app: App,
+    settings: LorebaseSettings
+): Promise<{ scanned: number; fixed: number; failed: number }> {
+    const result = { scanned: 0, fixed: 0, failed: 0 };
+    const files = [
+        ...getLibraryFiles(app, settings.games.folderPath, 'games'),
+        ...getLibraryFiles(app, settings.anime.folderPath, 'anime'),
+        ...getLibraryFiles(app, settings.movies.folderPath, 'movies'),
+        ...getLibraryFiles(app, settings.series.folderPath, 'series'),
+        ...getLibraryFiles(app, settings.books.folderPath, 'books'),
+        ...getLibraryFiles(app, settings.manga.folderPath, 'manga'),
+    ];
+    const seen = new Set<string>();
+    for (const entry of files) {
+        if (seen.has(entry.file.path)) continue;
+        seen.add(entry.file.path);
+        result.scanned++;
+        try {
+            const metadata = app.metadataCache.getFileCache(entry.file)?.frontmatter as Record<string, unknown> | undefined;
+            if (!metadata) continue;
+            const updates: Record<string, string> = {};
+            for (const key of ['poster', 'poster_b', 'image', 'image_b']) {
+                const value = metadata[key];
+                if (typeof value === 'string' && isResourceUrl(value)) {
+                    const fixed = toStoredImagePath(app, value);
+                    if (fixed && fixed !== value) updates[key] = fixed;
+                }
+            }
+            if (!Object.keys(updates).length) continue;
+            await app.fileManager.processFrontMatter(entry.file, (frontmatter: Record<string, unknown>) => {
+                for (const [key, value] of Object.entries(updates)) frontmatter[key] = value;
+            });
+            result.fixed++;
+        } catch (error) {
+            result.failed++;
+            console.warn('[Lorebase] Failed to repair image paths:', entry.file.path, error);
+        }
+    }
+    return result;
 }
 
 export async function localizeExistingNoteImages(

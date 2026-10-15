@@ -333,9 +333,12 @@ export async function getAniListMangaDetails(fetchJson: JsonFetcher, id: string)
     const chapters = getNumber(item, 'chapters');
     const volumes = getNumber(item, 'volumes');
 
+    const mangaName = pickAnimeTitle(item.title);
+    const nativeTitle = getString(getObject(item, 'title'), 'native').trim();
     return {
         kind: 'manga',
-        name: pickAnimeTitle(item.title),
+        name: mangaName,
+        originalTitle: nativeTitle && nativeTitle !== mangaName ? nativeTitle : undefined,
         description: stripHtml(getString(item, 'description')),
         poster: image,
         posterHorizontal: image,

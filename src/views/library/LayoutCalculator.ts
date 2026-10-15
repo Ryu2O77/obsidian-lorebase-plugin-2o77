@@ -4,16 +4,23 @@ import { CardSize, LorebaseSettings, ViewMode } from '../../types';
 
 export type EffectiveLayout = {
     cardSize: CardSize;
-    cardStyle: LorebaseSettings['games']['cardStyle'];
+    progressFooter: boolean;
+    titleBelow: boolean;
     columns: number;
     orientation: LorebaseSettings['games']['orientation'];
     dimensions: CardDimensionOverrides | null;
     minCardWidth: number;
+    /** Quick size multiplier already baked into minCardWidth; getCardHeight needs it too for horizontal cards */
+    cardScale: number;
 };
 
+const MAX_COLUMNS = 12;
+const MIN_CARD_WIDTH_PX = 72;
 const GRID_GAP_PX = 16;
 const GRID_PADDING_PX = 16;
 const PROGRESS_FOOTER_HEIGHT_PX = 48;
+const TITLE_FOOTER_HEIGHT_PX = 44;
+const PROGRESS_ONLY_FOOTER_HEIGHT_PX = 34;
 const PRESET_HORIZONTAL_MIN_WIDTH = 340;
 const MOBILE_BREAKPOINT_PX = 520;
 const MOBILE_VERTICAL_MIN_WIDTH_PX = 136;
@@ -28,7 +35,13 @@ export class LayoutCalculator {
 
     getEffectiveLayout(settings: LorebaseSettings['games'], viewMode: ViewMode): EffectiveLayout {
         const orientation = viewMode === 'horizontal' ? 'horizontal' : 'vertical';
-        const maxColumns = orientation === 'horizontal' ? 4 : settings.columns;
+        const cardScale = this.clampCardScale(settings.cardScale);
+        const baseColumns = orientation === 'horizontal' ? 4 : settings.columns;
+        // Smaller cards need room for more columns; without this the column cap (5 by default)
+        // would keep the cards at their default width and the slider could only enlarge them.
+        const maxColumns = cardScale < 1
+            ? Math.min(MAX_COLUMNS, Math.max(baseColumns, Math.ceil(baseColumns / cardScale)))
+            : baseColumns;
         const cardSize = settings.cardSize;
         const dimensions = settings.customCardSize
             ? this.resolveCustomCardDimensions(settings, cardSize)
@@ -40,15 +53,24 @@ export class LayoutCalculator {
         if (orientation === 'vertical' && availableWidth > 0 && availableWidth <= MOBILE_BREAKPOINT_PX) {
             minCardWidth = Math.min(minCardWidth, MOBILE_VERTICAL_MIN_WIDTH_PX);
         }
+        minCardWidth = Math.round(minCardWidth * cardScale);
 
         return {
             cardSize,
-            cardStyle: settings.cardStyle,
+            progressFooter: settings.progressFooter === true,
+            titleBelow: settings.titleBelow === true,
             columns: maxColumns,
             orientation,
             dimensions,
             minCardWidth,
+            cardScale,
         };
+    }
+
+    /** 0.6–1.6x; keeps the slider from producing unusably tiny or huge cards. */
+    private clampCardScale(value: number | undefined): number {
+        if (!Number.isFinite(value)) return 1;
+        return Math.min(1.6, Math.max(0.6, Math.round((value as number) * 20) / 20));
     }
 
     getRenderedColumns(layout: EffectiveLayout): number {
@@ -57,11 +79,18 @@ export class LayoutCalculator {
 
     getCardHeight(layout: EffectiveLayout): number {
         if (layout.orientation === 'horizontal') {
-            if (layout.dimensions) return layout.dimensions.horizontalHeight;
-            return parseInt(HORIZONTAL_CARD_SIZES[layout.cardSize].height) || 220;
+            const base = layout.dimensions ? layout.dimensions.horizontalHeight : (parseInt(HORIZONTAL_CARD_SIZES[layout.cardSize].height) || 220);
+            // Horizontal height isn't derived from width like vertical cards are, so the
+            // slider has to scale it explicitly to avoid stretching/squashing the poster.
+            return Math.round(base * layout.cardScale);
         }
-        if (layout.dimensions) return layout.dimensions.verticalMinHeight;
-        return parseInt(CARD_SIZES[layout.cardSize].minHeight) || 400;
+        // The static height is a minimum for vertical cards; it has to shrink with the slider
+        // or smaller cards would turn tall and narrow instead of keeping the poster ratio.
+        const shrink = Math.min(1, layout.cardScale);
+        const base = layout.dimensions
+            ? layout.dimensions.verticalMinHeight
+            : (parseInt(CARD_SIZES[layout.cardSize].minHeight) || 400);
+        return Math.round(base * shrink);
     }
 
     calculateActualCardHeight(
@@ -87,12 +116,15 @@ export class LayoutCalculator {
         // Phone grids use the poster ratio as the source of truth. Keeping the
         // desktop preset as a minimum here made every phone card ~400px tall
         // and forced the library into a single oversized column.
-        const imageHeight = gridWidth <= MOBILE_BREAKPOINT_PX
+        const imageHeight = gridWidth <= MOBILE_BREAKPOINT_PX || layout.cardScale < 1
             ? Math.ceil(cardWidth / ratio)
             : Math.max(staticHeight, Math.ceil(cardWidth / ratio));
-        return layout.cardStyle === 'progress'
-            ? imageHeight + PROGRESS_FOOTER_HEIGHT_PX
-            : imageHeight;
+        const progress = layout.progressFooter;
+        // Title + progress share one footer (the old progress height); each alone is a bit shorter.
+        if (progress && layout.titleBelow) return imageHeight + PROGRESS_FOOTER_HEIGHT_PX;
+        if (progress) return imageHeight + PROGRESS_ONLY_FOOTER_HEIGHT_PX;
+        if (layout.titleBelow) return imageHeight + TITLE_FOOTER_HEIGHT_PX;
+        return imageHeight;
     }
 
     private resolveCustomCardDimensions(
@@ -124,8 +156,8 @@ export class LayoutCalculator {
     }
 
     private resolveAdaptiveColumns(maxColumns: number, minCardWidth: number): number {
-        const safeMaxColumns = this.clampDimension(maxColumns, 1, 12, 5);
-        const safeMinWidth = this.clampDimension(minCardWidth, 120, 700, 220);
+        const safeMaxColumns = this.clampDimension(maxColumns, 1, MAX_COLUMNS, 5);
+        const safeMinWidth = this.clampDimension(minCardWidth, MIN_CARD_WIDTH_PX, 700, 220);
         const widthSource = this.getAvailableWidth();
         if (!Number.isFinite(widthSource) || widthSource <= 0) return safeMaxColumns;
 

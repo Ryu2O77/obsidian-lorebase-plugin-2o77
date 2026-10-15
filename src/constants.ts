@@ -3,7 +3,7 @@
  * Default values, configurations, and static data
  */
 
-import { LorebaseSettings, MediaStatus, CardSize, CardOrientation, CardStyle, NoteImportFieldMapping } from './types';
+import { LorebaseSettings, MediaStatus, CardSize, CardOrientation, NoteImportFieldMapping } from './types';
 import type { TranslationKey } from './localization';
 
 // =============================================================================
@@ -18,8 +18,11 @@ const DEFAULT_LIBRARY_SETTINGS = {
     folderPath: '',
     columns: 5,
     cardSize: 'medium' as CardSize,
-    cardStyle: 'hover' as CardStyle,
+    hoverPreview: true,
+    progressFooter: false,
+    titleBelow: false,
     customCardSize: false,
+    cardScale: 1,
     customCardMinWidth: 220,
     customCardMinHeight: 380,
     customCardImageRatio: 0.72,
@@ -405,6 +408,7 @@ export const DEFAULT_SETTINGS: LorebaseSettings = {
     accentColor: '#e4a47e',
     showAddModeChoice: true,
     cardClickAction: 'open',
+    hiddenFiles: { patterns: '', showHidden: false },
     completionDateBadgeFormat: 'short',
     completionDateBadgeFormats: {
         games: 'short',
@@ -647,7 +651,7 @@ export const DEFAULT_SETTINGS: LorebaseSettings = {
     anime: {
         ...DEFAULT_LIBRARY_SETTINGS,
         folderPath: 'Anime',
-        cardStyle: 'progress',
+        progressFooter: true,
         viewState: { ...DEFAULT_LIBRARY_SETTINGS.viewState, sort: { ...DEFAULT_LIBRARY_SETTINGS.viewState.sort }, group: { ...DEFAULT_LIBRARY_SETTINGS.viewState.group }, rules: [], tags: [], genres: [] },
         savedViews: [],
     },

@@ -7,13 +7,20 @@ import { App, Menu, Modal, setIcon, TFile } from 'obsidian';
 import { AnimeFormat, AnimeItem, AnimePart, AnimeStatus, RelatedMediaLink, UserRating } from '../types';
 import { DEFAULT_COVER, STATUS_CONFIG } from '../constants';
 import { i18n, t } from '../localization';
+import { findRelatedSuggestions } from '../services/media/insights';
 import { createLorebaseDropdown, LorebaseDropdownHandle } from '../components/LorebaseDropdown';
 import { GenreEditModal } from './GenreEditModal';
+import { paintStars, starValueFromClick } from './halfStars';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
 import { setupMobileEditor } from './mobileEditor';
 import { extractMarkdownSection } from '../services/markdownSections';
 import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
+import { mountPosterEditor, getPosterFolder } from './posterEditor';
+import { CompanionsEditor } from './CompanionsEditor';
+import { PLATFORM_KEYS, WATCHED_WITH_KEYS, collectVaultNames } from '../services/media/people';
+import { getCompanionStatusLabels } from '../views/library/companionLabels';
+import { completePartsProgress } from '../services/media/seriesProgress';
 
 type PartDraft = AnimePart;
 type AnimePartsRefreshResult = {
@@ -36,6 +43,11 @@ export class AnimeEditModal extends Modal {
     private selectedStatus: AnimeStatus;
     private favorite: boolean;
     private title: string;
+    /** Image shown in the poster card and the vault path chosen in the editor (null = untouched) */
+    private posterDisplay: string | null = null;
+    private horizontalDisplay: string | null = null;
+    private posterStored: string | null = null;
+    private horizontalStored: string | null = null;
     private year: number | null;
     private summary: string;
     private myNotes = '';
@@ -48,6 +60,7 @@ export class AnimeEditModal extends Modal {
     private studios: string[];
     private tags: string[];
     private parts: PartDraft[];
+    private companionsEditor?: CompanionsEditor;
     private activePartId: string | null;
     private relatedMedia: RelatedMediaLink[];
     private relatedCandidates: RelatedCandidate[];
@@ -135,6 +148,7 @@ export class AnimeEditModal extends Modal {
         this.bindNotes(root);
         void this.loadMyNotes(root);
         this.bindTags(root);
+        this.mountCompanions(root);
         this.bindRelatedMedia(root);
         this.bindDates(root);
         if (this.onRefreshCommunityRating) {
@@ -206,6 +220,7 @@ export class AnimeEditModal extends Modal {
                             <div class="lorebase-editmode-title-row">
                                 <input class="lorebase-editmode-title-input" data-field="title" type="text" aria-label="${t('templateFieldName')}" />
                             </div>
+                            <div class="lorebase-editmode-original-title" data-role="original-title"></div>
                             <div class="lorebase-editmode-meta-row">
                                 <label class="lorebase-editmode-field">
                                     <span class="lorebase-editmode-field-label">${t('year')}</span>
@@ -257,11 +272,11 @@ export class AnimeEditModal extends Modal {
                                     <span class="lorebase-editmode-rating-caption">${t('editPersonalRating')}</span>
                                     <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-ghost lorebase-editmode-btn-tight" data-action="clear-rating">${t('editClear')}</button>
                                 </div>
-                                <div class="lorebase-editmode-stars" data-role="stars"></div>
-                                <div class="lorebase-editmode-rating-meta">
+                                <div class="lorebase-editmode-rating-body">
+                                    <div class="lorebase-editmode-stars" data-role="stars"></div>
                                     <span class="lorebase-editmode-rating-value" data-role="rating-value">0.0 / 5.0</span>
-                                    <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 </div>
+                                <span class="lorebase-editmode-rating-hint">${t('editRatingHint')}</span>
                                 <div class="lorebase-editmode-rating-line"><span class="lorebase-editmode-rating-line-fill" data-role="rating-line"></span></div>
                             </div>
                             <div class="lorebase-editmode-play-dates">
@@ -300,6 +315,7 @@ export class AnimeEditModal extends Modal {
                                     <button type="button" class="lorebase-editmode-anime-parts-icon-action is-danger" data-action="remove-part" aria-label="${t('editRemovePart')}"></button>
                                 </div>
                             </div>
+                            <button type="button" class="lorebase-btn lorebase-complete-all" data-action="complete-all-parts">\u2713 ${t('seriesCompleteAll')}</button>
                             <div class="lorebase-editmode-anime-part-summary">
                                 <div class="lorebase-editmode-anime-part-stat">
                                     <span class="lorebase-editmode-anime-part-stat-label">${t('editTotalEpisodes')}</span>
@@ -351,6 +367,7 @@ export class AnimeEditModal extends Modal {
                                 <h3 class="lorebase-editmode-panel-title">${t('editRelatedMedia')}</h3>
                                 <button type="button" class="lorebase-editmode-btn lorebase-editmode-btn-tight" data-action="add-related">${t('editAddRelated')}</button>
                             </div>
+                            <div class="lorebase-editmode-related-suggestions" data-role="related-suggestions"></div>
                             <div class="lorebase-editmode-related-list" data-role="related-media"></div>
                         </section>
 
@@ -381,6 +398,8 @@ export class AnimeEditModal extends Modal {
                             <input class="lorebase-editmode-input lorebase-editmode-tag-input" type="text" data-field="new-tag" placeholder="${t('editTagPlaceholder')}" />
                         </section>
 
+                        <section class="lorebase-editmode-panel lorebase-editmode-companions" data-role="companions-panel"></section>
+
                         <section class="lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-timestamps">
                             <div class="lorebase-editmode-panel-title-row"><h3 class="lorebase-editmode-panel-title">${t('editDates')}</h3></div>
                             <div class="lorebase-editmode-kv-list">
@@ -402,8 +421,30 @@ export class AnimeEditModal extends Modal {
             poster.alt = this.anime.displayName;
         }
 
+        const posterCard = poster?.closest<HTMLElement>('.lorebase-editmode-poster-card');
+        if (posterCard && !posterCard.querySelector('.lorebase-poster-editor')) {
+            mountPosterEditor(posterCard, {
+                app: this.app,
+                kind: 'anime',
+                getTitle: () => this.title,
+                getFolder: () => getPosterFolder(this.app),
+                supportsHorizontal: true,
+                getDisplay: (target) => target === 'horizontal' ? (this.horizontalDisplay ?? ((this.anime as { horizontalImageUrl?: string | null }).horizontalImageUrl ?? '')) : (this.posterDisplay ?? this.anime.imageUrl),
+                onChange: (target, change) => {
+                    if (target === 'horizontal') { this.horizontalDisplay = change.display; this.horizontalStored = change.stored; } else { this.posterDisplay = change.display; this.posterStored = change.stored; }
+                },
+            });
+        }
+
         const title = this.qs<HTMLInputElement>(root, '[data-field="title"]');
         if (title) title.value = this.anime.displayName;
+        const originalEl = this.qs<HTMLElement>(root, '[data-role="original-title"]');
+        if (originalEl) {
+            const original = this.anime.originalTitle?.trim() ?? '';
+            const show = Boolean(original) && original.toLocaleLowerCase() !== this.anime.displayName.trim().toLocaleLowerCase();
+            originalEl.toggleClass('is-hidden', !show);
+            if (show) originalEl.setText(`${t('originalTitleLabel')}: ${original}`);
+        }
         const year = this.qs<HTMLInputElement>(root, '[data-field="year"]');
         if (year) year.value = this.year ? String(this.year) : '';
         const studios = this.qs<HTMLInputElement>(root, '[data-field="studios"]');
@@ -470,6 +511,12 @@ export class AnimeEditModal extends Modal {
                     this.finished = this.getTodayDateInput();
                     this.finishedDatePicker?.syncInput(this.finished);
                 }
+                if (status === 'completed' && this.parts.length) {
+                    this.parts = completePartsProgress(this.parts);
+                    this.renderPartStrip(root);
+                    this.renderActivePartEditor(root);
+                    this.updateProgressSummary(root);
+                }
                 this.updateStatusUI(root);
             });
         });
@@ -477,8 +524,8 @@ export class AnimeEditModal extends Modal {
 
     private bindRating(root: HTMLElement): void {
         root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.selectedRating = Number(btn.dataset.rating) as UserRating;
+            btn.addEventListener('click', (event) => {
+                this.selectedRating = starValueFromClick(btn, Number(btn.dataset.rating), event);
                 this.updateRatingUI(root);
             });
         });
@@ -574,6 +621,20 @@ export class AnimeEditModal extends Modal {
             this.renderActivePartEditor(root);
             this.updateProgressSummary(root);
             this.updatePartActions(root);
+        });
+
+        this.qs<HTMLButtonElement>(root, '[data-action="complete-all-parts"]')?.addEventListener('click', () => {
+            if (!this.parts.length) return;
+            this.parts = completePartsProgress(this.parts);
+            this.selectedStatus = 'completed';
+            if (!this.finished) {
+                this.finished = this.getTodayDateInput();
+                this.finishedDatePicker?.syncInput(this.finished);
+            }
+            this.renderPartStrip(root);
+            this.renderActivePartEditor(root);
+            this.updateProgressSummary(root);
+            this.updateStatusUI(root);
         });
 
         this.qs<HTMLButtonElement>(root, '[data-action="episode-dec"]')?.addEventListener('click', () => {
@@ -787,7 +848,11 @@ export class AnimeEditModal extends Modal {
                 const part = this.getActivePart();
                 if (!part) return;
                 part.status = option.status;
+                if (option.status === 'completed' && part.episodeTotal && part.episodeTotal > 0) {
+                    part.episodeCurrent = part.episodeTotal;
+                }
                 this.renderPartStatusSegments(root);
+                this.renderActivePartEditor(root);
                 this.renderPartStrip(root);
                 this.updateProgressSummary(root);
             });
@@ -897,7 +962,32 @@ export class AnimeEditModal extends Modal {
         });
     }
 
+    /** Candidates that share this title's franchise, excluding anything already linked. */
+    private renderRelatedSuggestions(root: HTMLElement): void {
+        const host = this.qs<HTMLElement>(root, '[data-role="related-suggestions"]');
+        if (!host) return;
+        host.empty();
+        const linked = new Set(this.relatedMedia.map((entry) => entry.path));
+        const pool = this.relatedCandidates.filter((candidate) => !linked.has(candidate.path));
+        const suggestions = findRelatedSuggestions({ path: this.anime.filePath, franchise: this.anime.franchise }, pool);
+        if (!suggestions.length) return;
+        host.createDiv({ cls: 'lorebase-editmode-related-suggestions-label', text: t('editRelatedSuggested') });
+        const row = host.createDiv({ cls: 'lorebase-editmode-related-suggestions-row' });
+        for (const suggestion of suggestions) {
+            const chip = row.createEl('button', {
+                cls: 'lorebase-editmode-chip lorebase-editmode-chip-add',
+                attr: { type: 'button', title: suggestion.title },
+                text: `+ ${suggestion.title}`,
+            });
+            chip.addEventListener('click', () => {
+                this.relatedMedia = this.normalizeRelatedMedia([...this.relatedMedia, suggestion]);
+                this.renderRelatedMedia(root);
+            });
+        }
+    }
+
     private renderRelatedMedia(root: HTMLElement): void {
+        this.renderRelatedSuggestions(root);
         const container = this.qs<HTMLElement>(root, '[data-role="related-media"]');
         if (!container) return;
         container.empty();
@@ -1057,10 +1147,7 @@ export class AnimeEditModal extends Modal {
     }
 
     private updateRatingUI(root: HTMLElement): void {
-        root.querySelectorAll<HTMLButtonElement>('.lorebase-editmode-star').forEach(btn => {
-            const value = Number(btn.dataset.rating ?? '0');
-            btn.toggleClass('is-active', this.selectedRating !== null && value <= this.selectedRating);
-        });
+        paintStars(root, this.selectedRating);
         const numeric = this.selectedRating ?? 0;
         this.setText(root, '[data-role="rating-value"]', `${numeric.toFixed(1)} / 5.0`);
         const line = this.qs<HTMLElement>(root, '[data-role="rating-line"]');
@@ -1160,6 +1247,8 @@ export class AnimeEditModal extends Modal {
     private getPartChipLabel(part: PartDraft): string {
         const current = part.episodeCurrent ?? 0;
         const total = part.episodeTotal ?? '?';
+        const name = part.title?.trim();
+        if (name) return `${name} ${current}/${total}`;
         if (part.kind === 'tv') {
             const season = part.seasonNumber ? `S${part.seasonNumber}` : 'TV';
             return `${season} ${current}/${total}`;
@@ -1336,6 +1425,24 @@ export class AnimeEditModal extends Modal {
         return this.save();
     }
 
+    private mountCompanions(root: HTMLElement): void {
+        const host = root.querySelector<HTMLElement>('[data-role="companions-panel"]');
+        if (!host) return;
+        this.companionsEditor = new CompanionsEditor(host, {
+            showWatchedWith: true,
+            showFranchise: false,
+            showPlatforms: true,
+            platforms: this.anime.platforms ?? [],
+            platformSuggestions: collectVaultNames(this.app, PLATFORM_KEYS),
+            watchedWith: this.anime.watchedWith ?? [],
+            companions: this.anime.companions ?? [],
+            franchise: [],
+            nameSuggestions: collectVaultNames(this.app, WATCHED_WITH_KEYS),
+            franchiseSuggestions: [],
+            statusLabels: getCompanionStatusLabels('anime'),
+        });
+    }
+
     private async save(): Promise<boolean> {
         if (!validateDatePickers([this.startedDatePicker, this.finishedDatePicker].filter((picker): picker is HierarchicalDatePicker => Boolean(picker)))) return false;
         const activePart = this.getActivePart();
@@ -1364,6 +1471,16 @@ export class AnimeEditModal extends Modal {
             episodeTotal: activePart?.episodeTotal ?? null,
             myNotes: this.myNotes,
         };
+
+        if (this.posterStored !== null) updates.imageUrl = this.posterStored;
+        if (this.horizontalStored !== null) Object.assign(updates, { horizontalImageUrl: this.horizontalStored });
+
+        const shared = this.companionsEditor?.getValue();
+        if (shared) {
+            updates.watchedWith = shared.watchedWith;
+            updates.platforms = shared.platforms;
+            updates.companions = shared.companions;
+        }
 
         await this.onSave(updates);
         this.close();

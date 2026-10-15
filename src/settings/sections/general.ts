@@ -1,7 +1,7 @@
 import { Setting, SliderComponent, ToggleComponent, setIcon } from 'obsidian';
 import { CARD_SIZES, COLOR_PRESETS, DEFAULT_COVER, DEFAULT_GAME_TAG_PRESETS, DEFAULT_SETTINGS, HORIZONTAL_CARD_SIZES, PARTICLE_INTENSITY_MAX, PARTICLE_INTENSITY_MIN, RATING_EMOJI, STATUS_CONFIG } from '../../constants';
 import { i18n, t } from '../../localization';
-import type { BadgePosition, CardClickAction, CardStyle, CompletionDateBadgeFormat, Language, LorebaseSettings, ParticleEffect, RatingBadgeMode, TagPreset } from '../../types';
+import type { BadgePosition, CardClickAction, MediaType, CompletionDateBadgeFormat, Language, LorebaseSettings, ParticleEffect, RatingBadgeMode, TagPreset } from '../../types';
 import { ICON_CARD_CUSTOMIZATION, ICON_GENERAL, LABEL_RU, LABEL_UK } from './constants';
 import { addLorebaseDropdown, LorebaseDropdownHandle } from './customDropdown';
 import { createMediaTabs } from './mediaTabs';
@@ -169,6 +169,58 @@ export function renderGeneralSettings(context: SettingsSectionContext, container
             await context.plugin.saveSettings();
         }
     );
+
+    const startSetting = new Setting(container)
+        .setName(t('settingsStartCategory'))
+        .setDesc(t('settingsStartCategoryDesc'));
+    const enabledMedia = context.plugin.settings.enabledMedia;
+    const categoryName = (key: 'settingsMediaGames' | 'settingsMediaAnime' | 'settingsMediaMovies' | 'settingsMediaSeries' | 'settingsMediaBooks' | 'settingsMediaManga'): string => {
+        const name = t(key).replace(/^\S+\s+/, '');
+        return name.charAt(0).toLocaleUpperCase() + name.slice(1);
+    };
+    const startOptions: Array<{ value: MediaType | 'last'; label: string }> = [
+        { value: 'last', label: t('settingsStartLast') },
+    ];
+    if (enabledMedia?.games !== false) startOptions.push({ value: 'game', label: categoryName('settingsMediaGames') });
+    if (enabledMedia?.anime) startOptions.push({ value: 'anime', label: categoryName('settingsMediaAnime') });
+    if (enabledMedia?.movies) startOptions.push({ value: 'movie', label: categoryName('settingsMediaMovies') });
+    if (enabledMedia?.series) startOptions.push({ value: 'series', label: categoryName('settingsMediaSeries') });
+    if (enabledMedia?.books) startOptions.push({ value: 'book', label: categoryName('settingsMediaBooks') });
+    if (enabledMedia?.manga) startOptions.push({ value: 'manga', label: categoryName('settingsMediaManga') });
+    addLorebaseDropdown<MediaType | 'last'>(
+        startSetting,
+        startOptions,
+        context.plugin.settings.startMediaType ?? 'game',
+        async (value) => {
+            context.plugin.settings.startMediaType = value;
+            await context.plugin.saveSettings();
+        }
+    );
+
+    new Setting(container)
+        .setName(t('hiddenTitle'))
+        .setDesc(t('hiddenDesc'))
+        .addTextArea((area) => {
+            area.setPlaceholder(t('hiddenPlaceholder'))
+                .setValue(context.plugin.settings.hiddenFiles.patterns)
+                .onChange(async (value) => {
+                    context.plugin.settings.hiddenFiles.patterns = value;
+                    await context.plugin.saveSettings();
+                    context.plugin.refreshViews();
+                });
+            area.inputEl.rows = 4;
+            area.inputEl.addClass('lorebase-hidden-patterns');
+        });
+    new Setting(container)
+        .setName(t('hiddenShow'))
+        .setDesc(t('hiddenShowDesc'))
+        .addToggle((toggle) => {
+            toggle.setValue(context.plugin.settings.hiddenFiles.showHidden).onChange(async (value) => {
+                context.plugin.settings.hiddenFiles.showHidden = value;
+                await context.plugin.saveSettings();
+                context.plugin.refreshViews();
+            });
+        });
 
     renderResetSettings(context, container);
 }
@@ -1013,7 +1065,7 @@ function renderBadgesEditor(context: SettingsSectionContext, container: HTMLElem
         return null;
     };
 
-    const getActiveCardStyleSettings = (): LorebaseSettings['games'] | null => getActiveProgressSettings();
+    const getActiveCardStyleSettings = (): LorebaseSettings['games'] | null => getActiveMediaSettings();
 
     const parseCssPixels = (value: string, fallback: number): number => {
         const parsed = Number.parseInt(value, 10);
@@ -1061,7 +1113,8 @@ function renderBadgesEditor(context: SettingsSectionContext, container: HTMLElem
     const applyPreviewDimensions = (): void => {
         const settings = getActiveMediaSettings();
         const isHorizontal = previewOrientation === 'horizontal';
-        const isProgressStyle = !isHorizontal && getActiveCardStyleSettings()?.cardStyle === 'progress';
+        const previewHasProgressFooter = getActiveCardStyleSettings()?.progressFooter === true;
+        const isProgressStyle = !isHorizontal && ((previewHasProgressFooter && previewMode !== 'movie' && previewMode !== 'game') || getActiveCardStyleSettings()?.titleBelow === true);
         const dimensions = getPreviewDimensions(settings, previewOrientation);
         card.toggleClass('lorebase-card-horizontal', isHorizontal);
         card.setCssStyles({
@@ -1409,7 +1462,12 @@ function renderBadgesEditor(context: SettingsSectionContext, container: HTMLElem
                             ? 'LOREBASE Manga Preview'
                             : 'LOREBASE Preview Card';
         const progressSettings = getActiveProgressSettings();
-        const isProgressStyle = getActiveCardStyleSettings()?.cardStyle === 'progress';
+        const titleBelowValue = getActiveCardStyleSettings()?.titleBelow === true;
+        // Movies and games have no episodes or pages, so the progress footer adds nothing for them.
+        const isProgressFooter = getActiveCardStyleSettings()?.progressFooter === true && previewMode !== 'movie' && previewMode !== 'game';
+        const isProgressStyle = isProgressFooter || titleBelowValue;
+        card.toggleClass('lorebase-card-title-style', titleBelowValue && !isProgressFooter);
+        previewProgressTitle.setCssStyles({ display: titleBelowValue ? '' : 'none' });
         card.toggleClass('is-anime', isAnime);
         card.toggleClass('is-series', previewMode === 'series');
         card.toggleClass('is-book', previewMode === 'book');
@@ -1458,7 +1516,9 @@ function renderBadgesEditor(context: SettingsSectionContext, container: HTMLElem
             showSeason ? previewSeasonBadge.textContent : null,
             showEpisode ? previewEpisodeBadge.textContent : null,
         ].filter((value): value is string => Boolean(value));
-        overlay.setCssStyles({ display: isProgressStyle ? 'none' : '' });
+        // The overlay (title/description/year) stays visible and editable in every style, so you
+        // can still position those fields here; "Progress footer"/"Title below" just add their
+        // bar underneath, on top of that, instead of replacing the overlay in this preview.
         previewAnimeProgress.toggleClass('is-hidden', isProgressStyle || !showProgress);
         previewProgressFooter.toggleClass('is-hidden', !isProgressStyle);
         previewProgressMeta.textContent = progressMetaParts.join(' \u00B7  ');
@@ -1842,10 +1902,11 @@ function renderBadgeOptions(
     const getActiveCardStyleSettings = (): LorebaseSettings['games'] | null => {
         const mode = getPreviewMode();
         if (mode === 'anime') return context.plugin.settings.anime;
+        if (mode === 'movie') return context.plugin.settings.movies;
         if (mode === 'series') return context.plugin.settings.series;
         if (mode === 'book') return context.plugin.settings.books;
         if (mode === 'manga') return context.plugin.settings.manga;
-        return null;
+        return context.plugin.settings.games;
     };
 
     const getActiveBookCoverSettings = (): LorebaseSettings['games'] | null => {
@@ -1927,8 +1988,10 @@ function renderBadgeOptions(
     let statusIconOnlyToggle: ToggleComponent | null = null;
     let favoritePulseToggle: ToggleComponent | null = null;
     let ratingModeDropdown: LorebaseDropdownHandle<RatingBadgeMode> | null = null;
-    let cardStyleDropdown: LorebaseDropdownHandle<CardStyle> | null = null;
+    let hoverPreviewToggle: ToggleComponent | null = null;
+    let progressFooterToggle: ToggleComponent | null = null;
     let bookCoverEffectToggle: ToggleComponent | null = null;
+    let titleBelowToggle: ToggleComponent | null = null;
     let completionDateFormatDropdown: LorebaseDropdownHandle<CompletionDateBadgeFormat> | null = null;
 
     const syncBadgeOptionControls = (): void => {
@@ -1997,26 +2060,59 @@ function renderBadgeOptions(
         }
     );
 
-    const cardStyleSetting = new Setting(container)
-        .setName(t('settingsCardStyle'))
-        .setDesc(t('settingsCardStyleDesc'));
-    cardStyleDropdown = addLorebaseDropdown<CardStyle>(
-        cardStyleSetting,
-        [
-            { value: 'hover', label: t('settingsCardStyleHover') },
-            { value: 'progress', label: t('settingsCardStyleProgress') },
-        ],
-        getActiveCardStyleSettings()?.cardStyle ?? 'hover',
-        (value) => {
-            if (syncingControls) return;
-            const settings = getActiveCardStyleSettings();
-            if (!settings) return;
-            settings.cardStyle = value;
-            renderBadgesPreview();
-            context.plugin.refreshViews();
-            void context.plugin.saveSettings();
-        }
-    );
+    const hoverPreviewSetting = new Setting(container)
+        .setName(t('settingsCardStyleHover'))
+        .setDesc(t('settingsCardStyleHoverDesc'))
+        .addToggle(toggle => {
+            hoverPreviewToggle = toggle;
+            toggle
+                .setValue(getActiveCardStyleSettings()?.hoverPreview !== false)
+                .onChange((value) => {
+                    if (syncingControls) return;
+                    const settings = getActiveCardStyleSettings();
+                    if (!settings) return;
+                    settings.hoverPreview = value;
+                    renderBadgesPreview();
+                    context.plugin.refreshViews();
+                    void context.plugin.saveSettings();
+                });
+        });
+
+    const progressFooterSetting = new Setting(container)
+        .setName(t('settingsCardStyleProgress'))
+        .setDesc(t('settingsCardStyleProgressDesc'))
+        .addToggle(toggle => {
+            progressFooterToggle = toggle;
+            toggle
+                .setValue(getActiveCardStyleSettings()?.progressFooter === true)
+                .onChange((value) => {
+                    if (syncingControls) return;
+                    const settings = getActiveCardStyleSettings();
+                    if (!settings) return;
+                    settings.progressFooter = value;
+                    renderBadgesPreview();
+                    context.plugin.refreshViews();
+                    void context.plugin.saveSettings();
+                });
+        });
+
+    const titleBelowSetting = new Setting(container)
+        .setName(t('settingsCardStyleTitle'))
+        .setDesc(t('settingsTitleBelowDesc'))
+        .addToggle(toggle => {
+            titleBelowToggle = toggle;
+            toggle
+                .setValue(getActiveCardStyleSettings()?.titleBelow === true)
+                .onChange((value) => {
+                    if (syncingControls) return;
+                    const settings = getActiveCardStyleSettings();
+                    if (!settings) return;
+                    settings.titleBelow = value;
+                    renderBadgesPreview();
+                    context.plugin.refreshViews();
+                    void context.plugin.saveSettings();
+                });
+        });
 
     const bookCoverEffectSetting = new Setting(container)
         .setName(t('settingsBookCoverEffect'))
@@ -2118,10 +2214,19 @@ function renderBadgeOptions(
     const syncCardCustomizationSettingsVisibility = (): void => {
         const cardStyleSettings = getActiveCardStyleSettings();
         const bookCoverSettings = getActiveBookCoverSettings();
-        cardStyleSetting.settingEl.setCssStyles({ display: cardStyleSettings ? '' : 'none' });
+        const mode = getPreviewMode();
+        // Movies and games have no episodes/pages, so "Progress footer" has nothing to show there.
+        const supportsProgressFooter = Boolean(cardStyleSettings) && mode !== 'movie' && mode !== 'game';
+        hoverPreviewSetting.settingEl.setCssStyles({ display: cardStyleSettings ? '' : 'none' });
+        progressFooterSetting.settingEl.setCssStyles({ display: supportsProgressFooter ? '' : 'none' });
+        titleBelowSetting.settingEl.setCssStyles({ display: cardStyleSettings ? '' : 'none' });
         bookCoverEffectSetting.settingEl.setCssStyles({ display: bookCoverSettings ? '' : 'none' });
         syncingControls = true;
-        if (cardStyleSettings) cardStyleDropdown?.setValue(cardStyleSettings.cardStyle ?? 'hover');
+        if (cardStyleSettings) {
+            hoverPreviewToggle?.setValue(cardStyleSettings.hoverPreview !== false);
+            progressFooterToggle?.setValue(cardStyleSettings.progressFooter === true);
+            titleBelowToggle?.setValue(cardStyleSettings.titleBelow === true);
+        }
         if (bookCoverSettings) bookCoverEffectToggle?.setValue(bookCoverSettings.bookCoverEffect);
         completionDateFormatDropdown?.setValue(getActiveCompletionDateFormat());
         syncingControls = false;

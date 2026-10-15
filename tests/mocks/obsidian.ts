@@ -95,3 +95,29 @@ export async function requestUrl(options: RequestUrlOptions): Promise<RequestUrl
 export function setIcon(): void {
     return;
 }
+
+/** Records menu structure so context-menu logic can be tested without Obsidian. */
+export class MenuItem {
+    title: unknown = '';
+    checked = false;
+    clickHandler: (() => void) | null = null;
+    submenu: Menu | null = null;
+    setTitle(title: unknown): this { this.title = title; return this; }
+    setIcon(_icon: string): this { return this; }
+    setChecked(checked: boolean | null): this { this.checked = Boolean(checked); return this; }
+    onClick(handler: () => void): this { this.clickHandler = handler; return this; }
+    setSubmenu(): Menu { this.submenu = new Menu(); return this.submenu; }
+}
+
+export class Menu {
+    static shown: Menu[] = [];
+    items: MenuItem[] = [];
+    addItem(build: (item: MenuItem) => void): this {
+        const item = new MenuItem();
+        build(item);
+        this.items.push(item);
+        return this;
+    }
+    addSeparator(): this { return this; }
+    showAtPosition(_position: { x: number; y: number }): void { Menu.shown.push(this); }
+}

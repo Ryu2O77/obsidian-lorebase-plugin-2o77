@@ -1,12 +1,16 @@
 import { App, TFile, TFolder } from 'obsidian';
+import { isFileHidden } from './media/hiddenFiles';
 import { FilterState, MangaItem, MangaPart, ReadingItem, ReadingStatus, ReadingStats, SortField, SortOrder } from '../types';
 import { DEFAULT_COVER } from '../constants';
 import { MetadataService } from './MetadataService';
 import { filterAndSortMedia } from './media/filtering';
 import { extractSimpleFrontmatter } from './media/libraryViewState';
-import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia } from './media/parsers';
+import { getRandomItem, parseNumber, parseRelatedMedia, parseUserRating, parseYear, serializeRelatedMedia, ratingBucket, resolveExactRating } from './media/parsers';
 import { collectFieldTags, collectTags, getAllMarkdownFiles, isTruthy, mapInFrameBatches } from './media/serviceUtils';
 import { upsertMarkdownSection } from './markdownSections';
+import { FRANCHISE_KEYS, PLATFORM_KEYS, WATCHED_WITH_KEYS, companionFrontmatter, readCompanions, readNameList, serializeNameList } from './media/people';
+import { toStoredImagePath } from './media/imagePaths';
+import { completeMangaParts } from './media/progressComplete';
 
 export type ReadingMediaType = 'book' | 'manga';
 
@@ -54,6 +58,7 @@ export class ReadingService {
     }
 
     parseFromCache(file: TFile): ReadingItem | null {
+        if (isFileHidden(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)) return null;
         try {
             const cache = this.app.metadataCache.getFileCache(file);
             const rawMetadata: unknown = cache?.frontmatter;
@@ -79,7 +84,7 @@ export class ReadingService {
                 year: parseYear(metadata.year ?? metadata.first_publish_year),
                 description,
                 summary: description,
-                userRating: parseUserRating(metadata.userRating ?? metadata.rating_user ?? metadata.rating),
+                userRating: resolveExactRating(parseUserRating(metadata.userRating ?? metadata.rating_user ?? metadata.rating), metadata.rating_exact),
                 favorite: isTruthy(metadata.favorite),
                 poster,
                 imageUrl: verticalImageUrl || poster || DEFAULT_COVER,
@@ -93,8 +98,13 @@ export class ReadingService {
                 dateAdded: file.stat?.ctime ?? file.stat?.mtime ?? Date.now(),
                 lastModified: file.stat?.mtime ?? file.stat?.ctime ?? Date.now(),
                 sourceUrl: this.readText(metadata, ['url', 'source_url']) || null,
+                originalTitle: this.readText(metadata, ['original_title', 'originalTitle']) || undefined,
                 started: this.readDateText(metadata, ['started', 'dateStarted', 'start_date']),
                 finished: this.readDateText(metadata, ['finished', 'dateFinished', 'finish_date', 'dateRead', 'readDate', 'completedDate']),
+                watchedWith: readNameList(metadata, WATCHED_WITH_KEYS),
+                companions: readCompanions(metadata, readNameList(metadata, WATCHED_WITH_KEYS)),
+                franchise: readNameList(metadata, FRANCHISE_KEYS),
+                platforms: readNameList(metadata, PLATFORM_KEYS),
                 integrationProvider: this.normalizeProvider(this.readText(metadata, ['integration_provider'])),
                 integrationId: this.readText(metadata, ['integration_id']) || null,
                 relatedMedia: parseRelatedMedia(metadata.related_media),
@@ -207,7 +217,8 @@ export class ReadingService {
             if (item.userRating) {
                 stats.withRating++;
                 ratingSum += item.userRating;
-                stats.ratingDistribution[item.userRating] = (stats.ratingDistribution[item.userRating] || 0) + 1;
+                const bucket = ratingBucket(item.userRating);
+                stats.ratingDistribution[bucket] = (stats.ratingDistribution[bucket] || 0) + 1;
             }
         }
         stats.avgRating = stats.withRating > 0 ? Math.round((ratingSum / stats.withRating) * 10) / 10 : 0;
@@ -230,18 +241,25 @@ export class ReadingService {
         if ('year' in updates) frontmatterUpdates.year = updates.year;
         if ('description' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['plot', 'summary', 'description'], updates.description);
         if ('summary' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['plot', 'summary', 'description'], updates.summary);
-        if ('poster' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], updates.poster);
-        if ('imageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], updates.imageUrl === DEFAULT_COVER ? '' : updates.imageUrl);
-        if ('horizontalImageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster_b', 'image_b', 'horizontal_poster'], updates.horizontalImageUrl);
+        if ('poster' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], this.toStoredImage(updates.poster));
+        if ('imageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster', 'image'], this.toStoredImage(updates.imageUrl === DEFAULT_COVER ? '' : updates.imageUrl));
+        if ('horizontalImageUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['poster_b', 'image_b', 'horizontal_poster'], this.toStoredImage(updates.horizontalImageUrl));
         if ('genres' in updates) this.updateListField(frontmatterUpdates, frontmatter, ['genres', 'genre'], updates.genres);
         if ('tags' in updates) this.updateListField(frontmatterUpdates, frontmatter, ['tags', 'tag'], updates.tags, true);
         if ('status' in updates) frontmatterUpdates.status = updates.status;
-        if ('userRating' in updates) frontmatterUpdates.rating = updates.userRating ?? null;
+        if ('userRating' in updates) {
+            frontmatterUpdates.rating = updates.userRating ?? null;
+            frontmatterUpdates.rating_exact = null;
+        }
         if ('favorite' in updates) frontmatterUpdates.favorite = updates.favorite;
         if (item.type === 'manga' && 'isAdult' in updates) frontmatterUpdates.Sex18 = updates.isAdult;
         if ('sourceUrl' in updates) this.updateTextField(frontmatterUpdates, frontmatter, ['url', 'source_url'], updates.sourceUrl);
         if ('started' in updates) frontmatterUpdates.started = this.normalizeDateString(String(updates.started ?? '')) || null;
         if ('finished' in updates) frontmatterUpdates.finished = this.normalizeDateString(String(updates.finished ?? '')) || null;
+        if ('watchedWith' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...WATCHED_WITH_KEYS])] = serializeNameList(updates.watchedWith);
+        if ('companions' in updates) Object.assign(frontmatterUpdates, companionFrontmatter(updates.companions ?? []));
+        if ('franchise' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...FRANCHISE_KEYS])] = serializeNameList(updates.franchise);
+        if ('platforms' in updates) frontmatterUpdates[this.preferredKey(frontmatter, [...PLATFORM_KEYS])] = serializeNameList(updates.platforms);
         if ('integrationProvider' in updates) frontmatterUpdates.integration_provider = updates.integrationProvider;
         if ('integrationId' in updates) frontmatterUpdates.integration_id = updates.integrationId;
         if ('relatedMedia' in updates) frontmatterUpdates.related_media = serializeRelatedMedia(updates.relatedMedia);
@@ -283,6 +301,10 @@ export class ReadingService {
             if (pagesDone || chaptersDone) {
                 frontmatterUpdates.status = 'completed';
             }
+            if (updates.status === 'completed') {
+                if (!('pageCurrent' in updates) && pageTotal) frontmatterUpdates.page_current = pageTotal;
+                if (!('chapterCurrent' in updates) && chapterTotal) frontmatterUpdates.chapter_current = chapterTotal;
+            }
         } else {
             if ('authors' in updates) this.updateDisplayListField(
                 frontmatterUpdates,
@@ -303,6 +325,18 @@ export class ReadingService {
             const chapterTotal = 'chapterTotal' in updates ? this.normalizeProgressValue(updates.chapterTotal) : item.chapterTotal;
             const chapterCurrent = 'chapterCurrent' in updates ? this.normalizeProgressValue(updates.chapterCurrent, chapterTotal) : item.chapterCurrent;
 
+            const completing = updates.status === 'completed' && !('parts' in updates) && !('chapterCurrent' in updates);
+            if (completing) {
+                if (parts.length) {
+                    parts = completeMangaParts(parts);
+                    const doneActive = parts.find((part) => part.id === activePartId) ?? parts[0];
+                    if (doneActive?.chapterCurrent !== null && doneActive?.chapterCurrent !== undefined) {
+                        frontmatterUpdates.chapter_current = doneActive.chapterCurrent;
+                    }
+                } else if (chapterTotal) {
+                    frontmatterUpdates.chapter_current = chapterTotal;
+                }
+            }
             if (parts.length) {
                 if ('volumeCurrent' in updates) {
                     const targetVolume = parseNumber(updates.volumeCurrent);
@@ -323,7 +357,7 @@ export class ReadingService {
             if (parts.length && this.areAllMangaPartsCompleted(parts)) {
                 frontmatterUpdates.status = 'completed';
             }
-            if ('parts' in updates || 'chapterCurrent' in updates || 'chapterTotal' in updates || 'volumeCurrent' in updates) {
+            if (completing || 'parts' in updates || 'chapterCurrent' in updates || 'chapterTotal' in updates || 'volumeCurrent' in updates) {
                 frontmatterUpdates.manga_parts = this.serializeMangaParts(parts);
                 frontmatterUpdates.active_part_id = activePartId ?? null;
             }
@@ -495,6 +529,11 @@ export class ReadingService {
 
     private preferredKey(frontmatter: Record<string, unknown> | null | undefined, keys: string[]): string {
         return keys.find((key) => this.hasKey(frontmatter, key)) ?? keys[0];
+    }
+
+    /** Never store a session-specific app:// URL in a note; keep the vault path instead. */
+    private toStoredImage(value: unknown): string {
+        return toStoredImagePath(this.app, value === null || value === undefined ? '' : String(value));
     }
 
     private updateTextField(
