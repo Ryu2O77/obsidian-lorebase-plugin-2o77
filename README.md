@@ -39,6 +39,31 @@
 
 ---
 
+## 🧩 Novedades de este fork
+
+Este fork personal agrega, sobre la base del plugin original, lo siguiente:
+
+- **"Status for" (watched with)**: lleva el estado y la nota de cada persona con la que ves/juegas algo, con acciones rápidas desde el menú contextual de la tarjeta y edición masiva.
+- **Franquicias**: campo propio, filtro y agrupación por franquicia, además de una insignia de progreso de franquicia en los encabezados de grupo.
+- **Medias estrellas (0.5) en todas las categorías**: juegos, anime y manga ahora aceptan rating a medias igual que películas, series y libros, incluyendo edición masiva, tabla y clic derecho.
+- **Borrado masivo con confirmación**, para evitar borrar varias notas por error.
+- **Idioma de metadata al buscar** (películas, series, anime y libros) y **título original** visible en pequeño dentro del editor (no en la tarjeta).
+- **Completado de temporadas/partes independiente**: al marcar una temporada o parte como completada, solo rellena los episodios de *esa* temporada/parte, no el total combinado de la serie/anime.
+- **TMDB como proveedor adicional para anime**.
+- **Archivos ocultos**: para excluir de la biblioteca archivos que no son portadas reales (por ejemplo, la base de datos exportada de Notion).
+- **Sugerencias de medios relacionados**: si dos notas comparten director o franquicia, aparece una sugerencia para vincularlas con un clic.
+- **Buscar por director**: al buscar en TMDB, si el texto coincide con una persona aparece también su filmografía como director.
+- **Slider de tamaño de póster**, manteniendo el aspect ratio, integrado en el botón de vista (vertical/horizontal/tabla).
+- **Edición de director/autor/estudio/desarrollador directo en la vista de tabla**.
+- **Mantener portada al cambiar de fuente de metadatos**, con una casilla "Keep current poster" al relincular una nota.
+- **Hover preview, Progress footer y Title below como interruptores independientes** (antes era un solo selector excluyente), con shortcuts rápidos en el botón de vista.
+- **Rediseño del bloque "Personal Rating"** en los cuatro editores, con estrellas más grandes y la nota en la misma fila.
+- Varios fixes de consistencia entre categorías y del hover/overlay de sinopsis con los estilos de tarjeta.
+
+El historial detallado de cada cambio está en [`CAMBIOS.md`](CAMBIOS.md).
+
+---
+
 ## 📸 Showcase
 
 <details open>
