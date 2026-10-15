@@ -759,6 +759,7 @@ export const DEFAULT_SETTINGS: LorebaseSettings = {
         statusWishlist: 'wishlist',
         fields: {
             playtime: true,
+            achievements: false,
             genres: true,
             releaseDate: true,
         },
@@ -774,6 +775,9 @@ export const DEFAULT_SETTINGS: LorebaseSettings = {
 export const STATUS_CONFIG: Record<MediaStatus, { pathD: string }> = {
     playing: {
         pathD: 'M5 3l14 9-14 9V3z',
+    },
+    played: {
+        pathD: 'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zM12 2v20',
     },
     dropped: {
         pathD: 'M6 18L18 6M6 6l12 12',
@@ -809,6 +813,7 @@ export const STATUS_CONFIG: Record<MediaStatus, { pathD: string }> = {
 export const STATUS_ICON_MAP: Record<MediaStatus, string> = {
     playing: 'play',
     not_started: 'circle',
+    played: 'contrast',
     dropped: 'x',
     sandbox: 'hexagon',
     wishlist: 'bookmark',

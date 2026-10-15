@@ -1,5 +1,6 @@
 import { App, Modal } from 'obsidian';
 import { t } from '../localization';
+import { bindDateTextInput } from './HierarchicalDatePicker';
 import { collectVaultNames, FRANCHISE_KEYS, parseNameList, todayDateInput, WATCHED_WITH_KEYS } from '../services/media/people';
 import type { MediaKind } from '../services/integrations/types';
 
@@ -52,14 +53,14 @@ export class AddOptionsModal extends Modal {
         dateRow.createSpan({ text: t('addFinishedOn') });
         const dateInput = dateRow.createEl('input', {
             cls: 'lorebase-editmode-input',
-            attr: { type: 'date', value: this.finishedDate },
+            attr: { type: 'text' },
         });
         dateRow.hide();
         completedBox.addEventListener('change', () => {
             this.completed = completedBox.checked;
             if (this.completed) dateRow.show(); else dateRow.hide();
         });
-        dateInput.addEventListener('change', () => { this.finishedDate = dateInput.value; });
+        bindDateTextInput(dateInput, this.finishedDate, (iso) => { this.finishedDate = iso; });
 
         let watchedInput: HTMLInputElement | null = null;
         let franchiseInput: HTMLInputElement | null = null;

@@ -524,6 +524,7 @@ export class Toolbar {
             options.push({ value: 'franchise', label: copy.franchise });
         }
         options.push(
+            { value: 'status', label: copy.byStatus },
             { value: 'finishedMonth', label: copy.finishedMonth },
             { value: 'finishedYear', label: copy.finishedYear }
         );
@@ -718,7 +719,7 @@ export class Toolbar {
     private viewText(): {
         configure: string; modified: string; baseView: string; savedViews: string; reset: string;
         update: string; deleteView: string; viewName: string; saveAs: string; sortBy: string;
-        groupBy: string; noGrouping: string; series: string; franchise: string; finishedMonth: string; finishedYear: string;
+        groupBy: string; noGrouping: string; byStatus: string; series: string; franchise: string; finishedMonth: string; finishedYear: string;
         filters: string; noFilters: string; addFilter: string; builtIn: string; noteFields: string;
         additional: string; showMore: string; showLess: string;
         missingField: string; remove: string; rename: string; from: string; to: string; operators: Record<string, string>;
@@ -728,7 +729,7 @@ export class Toolbar {
             configure: 'Вид и фильтры', modified: 'Изменено', baseView: 'Базовый вид',
             savedViews: 'Сохранённые виды', reset: 'Сбросить', update: 'Обновить вид',
             deleteView: 'Удалить вид', viewName: 'Название вида', saveAs: 'Сохранить как',
-            sortBy: 'Сортировка', groupBy: 'Группировка', noGrouping: 'Без группировки',
+            sortBy: 'Сортировка', groupBy: 'Группировка', noGrouping: 'Без группировки', byStatus: 'По статусу',
             series: 'По серии', franchise: 'По франшизе', finishedMonth: 'По месяцу окончания', finishedYear: 'По году окончания',
             filters: 'Фильтры', noFilters: 'Нет активных фильтров', addFilter: 'Добавить фильтр',
             builtIn: 'Основные', noteFields: 'Поля заметок', missingField: 'Поле отсутствует',
@@ -746,7 +747,7 @@ export class Toolbar {
             configure: 'Вигляд і фільтри', modified: 'Змінено', baseView: 'Базовий вигляд',
             savedViews: 'Збережені вигляди', reset: 'Скинути', update: 'Оновити вигляд',
             deleteView: 'Видалити вигляд', viewName: 'Назва вигляду', saveAs: 'Зберегти як',
-            sortBy: 'Сортування', groupBy: 'Групування', noGrouping: 'Без групування',
+            sortBy: 'Сортування', groupBy: 'Групування', noGrouping: 'Без групування', byStatus: 'За статусом',
             series: 'За серією', franchise: 'За франшизою', finishedMonth: 'За місяцем завершення', finishedYear: 'За роком завершення',
             filters: 'Фільтри', noFilters: 'Немає активних фільтрів', addFilter: 'Додати фільтр',
             builtIn: 'Основні', noteFields: 'Поля нотаток', missingField: 'Поле відсутнє',
@@ -764,7 +765,7 @@ export class Toolbar {
             configure: 'View & filters', modified: 'Modified', baseView: 'Base view',
             savedViews: 'Saved views', reset: 'Reset', update: 'Update view',
             deleteView: 'Delete view', viewName: 'View name', saveAs: 'Save as',
-            sortBy: 'Sort', groupBy: 'Group', noGrouping: 'No grouping',
+            sortBy: 'Sort', groupBy: 'Group', noGrouping: 'No grouping', byStatus: 'By status',
             series: 'By series', franchise: 'By franchise', finishedMonth: 'By finish month', finishedYear: 'By finish year',
             filters: 'Filters', noFilters: 'No active filters', addFilter: 'Add filter',
             builtIn: 'Built in', noteFields: 'Note fields', missingField: 'Missing field',

@@ -274,7 +274,8 @@ export function groupMediaItems(
     items: MediaItem[],
     mode: GroupMode,
     order: SortOrder,
-    locale: string
+    locale: string,
+    statusOptions: Array<{ status: string; label: string }> = []
 ): Array<{ key: string; label: string; items: MediaItem[]; missing: boolean }> {
     if (mode === 'none') return [];
     const groups = new Map<string, { label: string; timestamp: number; items: MediaItem[]; missing: boolean }>();
@@ -285,7 +286,13 @@ export function groupMediaItems(
         let label = '';
         let timestamp = 0;
         let missing = false;
-        if (mode === 'series') {
+        if (mode === 'status') {
+            const index = statusOptions.findIndex((option) => option.status === item.status);
+            key = `status:${item.status}`;
+            label = index >= 0 ? statusOptions[index].label : String(item.status);
+            // Groups follow the order of the statuses (asc) or the reverse (desc).
+            timestamp = index >= 0 ? index : statusOptions.length;
+        } else if (mode === 'series') {
             const series = item.type === 'game' ? item.gameSeries.trim() : '';
             key = series || '__missing__';
             label = series || (locale.startsWith('ru') ? 'Без серии' : locale.startsWith('uk') ? 'Без серії' : 'No series');
@@ -371,7 +378,7 @@ function normalizeOrder(value: unknown, fallback: SortOrder): SortOrder {
 }
 
 function normalizeGroupMode(value: unknown, fallback: GroupMode): GroupMode {
-    return value === 'none' || value === 'series' || value === 'franchise' || value === 'finishedMonth' || value === 'finishedYear'
+    return value === 'none' || value === 'status' || value === 'series' || value === 'franchise' || value === 'finishedMonth' || value === 'finishedYear'
         ? value
         : fallback;
 }

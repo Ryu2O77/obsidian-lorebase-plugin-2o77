@@ -351,6 +351,10 @@ export class SteamSyncService {
                 await this.app.vault.create(fullPath, content);
                 const createdFile = this.app.vault.getAbstractFileByPath(fullPath);
                 if (createdFile instanceof TFile) {
+                    if (candidate.source !== 'wishlist') {
+                        const stats = await this.buildStatUpdates(steamSettings, game.appId, game.playtimeForever, steamSettings.fields.playtime);
+                        if (Object.keys(stats).length) await this.metadataService.updateMetadata(createdFile, stats);
+                    }
                     existingIndex.files.push(createdFile);
                     this.addFileToIndex(createdFile, existingIndex);
                 }
@@ -448,13 +452,104 @@ export class SteamSyncService {
         return warnings;
     }
 
+    /** Steam reports minutes; notes also get a friendlier hours value (one decimal). */
+    private minutesToHours(minutes: number): number {
+        return Math.round((minutes / 60) * 10) / 10;
+    }
+
+    private achievementsWarned = false;
+
+    /**
+     * Achievement counts for one game. Needs a Steam API key and a public "Game details" profile.
+     * Returns null for games without achievements or when Steam refuses the request.
+     */
+    async getAchievementProgress(
+        steamId: string,
+        apiKey: string,
+        appId: number
+    ): Promise<{ current: number; total: number } | null> {
+        if (!apiKey.trim()) return null;
+        try {
+            const resolvedSteamId = await this.resolveSteamId(steamId);
+            const url = new URL('https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/');
+            url.searchParams.set('appid', String(appId));
+            url.searchParams.set('steamid', resolvedSteamId);
+            url.searchParams.set('key', apiKey.trim());
+            url.searchParams.set('format', 'json');
+            const json = await this.jsonFetcher(url.toString());
+            const stats = this.asObject(this.asObject(json)?.playerstats);
+            if (!stats || stats.success === false) return null;
+            const list = this.asArray(stats.achievements);
+            if (!list.length) return null;
+            const current = list.filter((entry) => this.toNumber(this.asObject(entry)?.achieved) === 1).length;
+            return { current, total: list.length };
+        } catch (error) {
+            if ((this.isStatusError(error, 403) || this.isStatusError(error, 401)) && !this.achievementsWarned) {
+                this.achievementsWarned = true;
+                this.addWarning('Steam achievements need a valid API key and a public "Game details" privacy setting on your Steam profile.');
+            }
+            // 400 = the game has no achievements/stats; skip it quietly.
+            return null;
+        }
+    }
+
+    /** Frontmatter values derived from Steam library data for one game. */
+    private async buildStatUpdates(
+        settings: SteamSyncSettings,
+        appId: number,
+        minutes: number,
+        includePlaytime: boolean
+    ): Promise<Record<string, unknown>> {
+        const updates: Record<string, unknown> = {};
+        if (includePlaytime) {
+            updates.playtime = minutes;
+            updates.hours_played = this.minutesToHours(minutes);
+        }
+        if (settings.fields.achievements) {
+            const progress = await this.getAchievementProgress(settings.steamId, settings.apiKey, appId);
+            if (progress) {
+                updates.trophies_current = progress.current;
+                updates.trophies_total = progress.total;
+            }
+        }
+        return updates;
+    }
+
+    /**
+     * Fresh hours + achievement counts for a single game (nothing is written; the editor applies them).
+     * Returns null when Steam isn't configured or the request fails.
+     */
+    async fetchGameStats(
+        settings: SteamSyncSettings,
+        appId: number
+    ): Promise<{ hoursPlayed: number | null; trophiesCurrent: number | null; trophiesTotal: number | null } | null> {
+        if (!settings.steamId.trim() || !Number.isFinite(appId) || appId <= 0) return null;
+        this.achievementsWarned = false;
+        try {
+            const owned = await this.getOwnedGames(settings.steamId, settings.apiKey);
+            const game = owned.find((entry) => entry.appId === appId);
+            const progress = await this.getAchievementProgress(settings.steamId, settings.apiKey, appId);
+            if (!game && !progress) return null;
+            return {
+                hoursPlayed: game ? this.minutesToHours(game.playtimeForever) : null,
+                trophiesCurrent: progress?.current ?? null,
+                trophiesTotal: progress?.total ?? null,
+            };
+        } catch (error) {
+            console.warn('[Steam Sync] Failed to fetch stats for a single game', error);
+            return null;
+        }
+    }
+
     async syncPlaytimeForExisting(settings: LorebaseSettings): Promise<SteamSyncResult> {
         const steamSettings = settings.steamSync;
+        this.achievementsWarned = false;
 
         const result: SteamSyncResult = { created: 0, updated: 0, skipped: 0, failed: 0 };
         const owned = await this.getOwnedGames(steamSettings.steamId, steamSettings.apiKey);
         const existingIndex = this.indexExistingGames(settings.games.folderPath);
 
+        const jobs: Array<{ file: TFile; game: SteamOwnedGame }> = [];
         for (const game of owned) {
             const candidate: SteamImportCandidate = {
                 appId: game.appId,
@@ -467,17 +562,25 @@ export class SteamSyncService {
                 result.skipped++;
                 continue;
             }
-            try {
-                await this.metadataService.updateMetadata(duplicate, {
-                    steamAppId: game.appId,
-                    playtime: game.playtimeForever,
-                });
-                result.updated++;
-            } catch (error) {
-                console.error('[Steam Sync] Failed to update playtime', game, error);
-                result.failed++;
-            }
+            jobs.push({ file: duplicate, game });
         }
+
+        // Achievements need one request per game, so run a few at a time.
+        let cursor = 0;
+        const worker = async (): Promise<void> => {
+            while (cursor < jobs.length) {
+                const { file, game } = jobs[cursor++];
+                try {
+                    const stats = await this.buildStatUpdates(steamSettings, game.appId, game.playtimeForever, true);
+                    await this.metadataService.updateMetadata(file, { steamAppId: game.appId, ...stats });
+                    result.updated++;
+                } catch (error) {
+                    console.error('[Steam Sync] Failed to update playtime', game, error);
+                    result.failed++;
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(steamSettings.fields.achievements ? 5 : 1, jobs.length) }, worker));
 
         return result;
     }
@@ -732,9 +835,7 @@ export class SteamSyncService {
             url: game.details.url || `https://store.steampowered.com/app/${game.appId}/`,
         };
 
-        if (settings.fields.playtime) {
-            updates.playtime = game.playtimeForever;
-        }
+        Object.assign(updates, await this.buildStatUpdates(settings, game.appId, game.playtimeForever, settings.fields.playtime));
         if (settings.fields.genres) {
             updates.genres = game.details.genres;
         }

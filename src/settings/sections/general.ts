@@ -1586,6 +1586,7 @@ function renderStatusLabelAndPlanSettings(context: SettingsSectionContext, conta
     }> = [
         { key: 'completed', label: t('statusPlayed'), icon: 'circle-check-big' },
         { key: 'playing', label: t('statusPlaying'), icon: 'play' },
+        { key: 'played', label: t('statusPartlyPlayed'), icon: 'contrast' },
         { key: 'dropped', label: t('statusDropped'), icon: 'circle-x' },
         { key: 'wishlist', label: t('statusWishlist'), icon: 'bookmark' },
         { key: 'not_started', label: t('statusNotStarted'), icon: 'circle-dashed' },

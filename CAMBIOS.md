@@ -1,3 +1,36 @@
+# Revisión siguiente (21): "Completed" ya no rellena los trofeos
+- Elegir el estado **Completed** en un juego solo cambia el estado (y pone la fecha de fin si estaba vacía). Los trofeos solo se rellenan con el botón "Mark all trophies earned".
+
+# Revisión siguiente (20): horas sin círculo
+- En el panel Progress de juegos, **Hours played** ya no es un anillo (no tiene total): ahora es un contador con icono de reloj y las horas en grande. Los trofeos siguen con su anillo.
+
+# Revisión siguiente (19): botón para sincronizar un juego con Steam
+- En el editor de juegos, panel **Progress**, aparece el botón **"Sync hours & trophies from Steam"** (solo si el juego tiene `steamAppId`). Carga las horas y los logros de ese juego en los campos; se guardan al pulsar Save. Usa el Steam ID y la API key de Ajustes > Sync.
+
+# Revisión siguiente (18): Steam sincroniza horas y logros
+- **Horas:** al sincronizar con Steam, además de `playtime` (minutos) se guarda `hours_played` (horas con un decimal). Las notas que solo tienen `playtime` muestran las horas en el editor automáticamente.
+- **Logros:** nueva opción **Achievements** en Ajustes > Sync > Steam data (desactivada por defecto). Guarda `trophies_current` y `trophies_total`. Necesita tu API key de Steam y que "Game details" sea público en tu perfil; los juegos sin logros se saltan. Se hace una petición por juego (5 a la vez).
+- Funciona al importar, al actualizar duplicados y en la sincronización automática de playtime.
+
+# Revisión siguiente (17): horas jugadas y trofeos en juegos
+- El panel **Progress** del editor de juegos ahora tiene **Hours played** y **Trophies** (obtenidos / totales), con anillos de progreso como en libros .
+- Botón **"Mark all trophies earned"**: completa los trofeos, pone el estado en Completed y la fecha de fin (hoy) si estaba vacía.
+- Se guardan en la nota como `hours_played`, `trophies_current` y `trophies_total`.
+
+# Revisión siguiente (16): estado "Played" en juegos
+- Nuevo estado de juego **Played** (`status: played`) para juegos que ya jugaste pero no completaste. Aparece en el editor, la edición masiva, la creación manual, los filtros, la tarjeta (insignia morada), las estadísticas y las etiquetas personalizables de Ajustes.
+- "Completed" (antes mostrado como "Played" en versiones muy viejas) sigue siendo `completed`.
+- **Ojo:** las notas antiguas con `status: played` ahora se leen como "Played" (antes se leían como completadas). Las que usan `played: true` siguen contando como completadas.
+
+# Revisión siguiente (15): agrupar por estado
+- Nueva opción **Group > By status** en el menú de vista (juegos y el resto de categorías). Los grupos usan tus etiquetas de estado y siguen el orden de los estados (el botón de orden los invierte). Funciona en tarjetas y en tabla, y se guarda en las vistas guardadas.
+
+# Revisión siguiente (14): fechas Día/Mes/Año y capítulos del mismo color que las páginas
+- **Libros:** el anillo de "Current chapter" ahora usa el mismo color (cian) que "Current page".
+- **Fechas en todos los editores:** se muestran y se escriben como `dd/mm/yyyy` (en ruso/ucraniano `dd.mm.yyyy`). Antes era `mm/dd/yyyy`. Afecta a Started, Finished y Release date en libros, manga, anime, películas, series y juegos.
+- **Edición masiva y "Añadir como completado":** la fecha ya no usa el selector nativo del sistema; ahora es un campo `dd/mm/yyyy`.
+- Lo que se guarda en las notas no cambia: sigue siendo `yyyy-mm-dd`.
+
 # Revisión siguiente (11): el brillo de los favoritos ya no se sale del póster
 Con "Progress footer" o "Title below" la tarjeta incluye el título y la barra bajo el póster, y el brillo rojo de los favoritos se dibujaba alrededor de toda la tarjeta, no solo del póster. Ahora el brillo va sobre el póster: en tarjetas con título debajo se aplica a la imagen, y en libros y manga con efecto de lomo se aplica a la portada (conservando su forma y sus sombras). Además esas tarjetas ya no recortan el brillo con su contención de pintado. Sin pie de página el resultado es el mismo de antes, y las tarjetas horizontales no cambian. Solo cambia `styles.css`; `main.js` queda idéntico.
 

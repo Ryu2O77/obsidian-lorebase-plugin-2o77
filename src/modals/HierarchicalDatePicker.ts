@@ -114,13 +114,8 @@ export class HierarchicalDatePicker {
 
     syncInput(value: string = this.getValue()): void {
         const selected = parseIsoDate(value);
-        const isDayFirst = i18n.getLanguage() === 'ru' || i18n.getLanguage() === 'uk';
-        this.input.placeholder = isDayFirst ? 'дд.мм.гггг' : 'mm/dd/yyyy';
-        this.input.value = selected
-            ? isDayFirst
-                ? `${String(selected.day).padStart(2, '0')}.${String(selected.month).padStart(2, '0')}.${selected.year}`
-                : `${String(selected.month).padStart(2, '0')}/${String(selected.day).padStart(2, '0')}/${selected.year}`
-            : '';
+        this.input.placeholder = getDatePlaceholder();
+        this.input.value = formatIsoForDisplay(value);
         this.input.toggleClass('is-empty', !selected);
     }
 
@@ -356,7 +351,7 @@ export function validateDatePickers(pickers: HierarchicalDatePicker[]): boolean 
             ? 'Введите корректную дату в формате дд.мм.гггг'
             : language === 'uk'
                 ? 'Введіть коректну дату у форматі дд.мм.рррр'
-                : 'Enter a valid date in mm/dd/yyyy format';
+                : 'Enter a valid date in dd/mm/yyyy format';
         new Notice(message);
         picker.focus();
         return false;
@@ -364,7 +359,60 @@ export function validateDatePickers(pickers: HierarchicalDatePicker[]): boolean 
     return true;
 }
 
-function parseManualDate(value: string): string | null {
+/** Display separator: "." for ru/uk, "/" everywhere else. */
+function dateSeparator(): string {
+    const language = i18n.getLanguage();
+    return language === 'ru' || language === 'uk' ? '.' : '/';
+}
+
+export function getDatePlaceholder(): string {
+    const language = i18n.getLanguage();
+    if (language === 'ru') return 'дд.мм.гггг';
+    if (language === 'uk') return 'дд.мм.рррр';
+    return 'dd/mm/yyyy';
+}
+
+/** Turns a stored yyyy-mm-dd value into the Day/Month/Year text shown in editors ('' if invalid). */
+export function formatIsoForDisplay(value: string): string {
+    const parts = parseIsoDate(value);
+    if (!parts) return '';
+    const sep = dateSeparator();
+    return `${String(parts.day).padStart(2, '0')}${sep}${String(parts.month).padStart(2, '0')}${sep}${parts.year}`;
+}
+
+/**
+ * Turns a plain text input into a Day/Month/Year field bound to a yyyy-mm-dd value.
+ * Used by dialogs that have no calendar popover.
+ */
+export function bindDateTextInput(input: HTMLInputElement, initialIso: string, onChange: (iso: string) => void): { setValue: (iso: string) => void } {
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.maxLength = 10;
+    const setValue = (iso: string): void => {
+        input.placeholder = getDatePlaceholder();
+        input.value = formatIsoForDisplay(iso);
+        input.toggleClass('is-invalid', false);
+    };
+    input.addEventListener('input', () => {
+        const raw = input.value.trim();
+        input.toggleClass('is-invalid', false);
+        if (!raw) { onChange(''); return; }
+        const parsed = parseManualDate(raw);
+        if (parsed) onChange(parsed);
+    });
+    input.addEventListener('blur', () => {
+        const raw = input.value.trim();
+        if (!raw) { onChange(''); return; }
+        const parsed = parseManualDate(raw);
+        if (!parsed) { input.toggleClass('is-invalid', true); return; }
+        onChange(parsed);
+        setValue(parsed);
+    });
+    setValue(initialIso);
+    return { setValue };
+}
+
+export function parseManualDate(value: string): string | null {
     const normalized = value.trim();
     let year: number;
     let month: number;
@@ -378,9 +426,9 @@ function parseManualDate(value: string): string | null {
         const displayMatch = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(normalized);
         if (!displayMatch) return null;
         year = Number(displayMatch[3]);
-        const isDayFirst = i18n.getLanguage() === 'ru' || i18n.getLanguage() === 'uk';
-        month = Number(displayMatch[isDayFirst ? 2 : 1]);
-        day = Number(displayMatch[isDayFirst ? 1 : 2]);
+        // Dates are always typed day first: dd/mm/yyyy (dd.mm.yyyy in ru/uk).
+        month = Number(displayMatch[2]);
+        day = Number(displayMatch[1]);
     }
     const date = new Date(year, month - 1, day);
     if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;

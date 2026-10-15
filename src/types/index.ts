@@ -17,7 +17,7 @@ import type { VideoService } from '../services/VideoService';
 export type MediaType = 'game' | 'anime' | 'movie' | 'series' | 'book' | 'manga';
 
 /** Game completion status */
-export type GameStatus = 'completed' | 'playing' | 'dropped' | 'sandbox' | 'wishlist' | 'not_started';
+export type GameStatus = 'completed' | 'playing' | 'played' | 'dropped' | 'sandbox' | 'wishlist' | 'not_started';
 
 /** Anime release format */
 export type AnimeFormat = 'tv' | 'movie' | 'ova' | 'ona' | 'special';
@@ -210,7 +210,7 @@ export interface Companion {
     rating: number | null;
 }
 
-export type GroupMode = 'none' | 'series' | 'franchise' | 'finishedMonth' | 'finishedYear';
+export type GroupMode = 'none' | 'status' | 'series' | 'franchise' | 'finishedMonth' | 'finishedYear';
 
 export interface GroupSpec {
     mode: GroupMode;
@@ -404,6 +404,12 @@ export interface GameItem extends BaseMediaItem {
     finished?: string | null;
     /** Release date stored in frontmatter */
     releaseDate?: string | null;
+    /** Hours played (frontmatter `hours_played`) */
+    hoursPlayed?: number | null;
+    /** Trophies / achievements earned (frontmatter `trophies_current`) */
+    trophiesCurrent?: number | null;
+    /** Total trophies / achievements available (frontmatter `trophies_total`) */
+    trophiesTotal?: number | null;
     /** Publisher stored in frontmatter */
     publisher?: string;
     /** Developer stored in frontmatter */
@@ -866,6 +872,8 @@ export interface SteamSyncSettings {
     statusWishlist: GameStatus;
     fields: {
         playtime: boolean;
+        /** Sync achievement counts (needs a Steam API key and public game details) */
+        achievements: boolean;
         genres: boolean;
         releaseDate: boolean;
     };
@@ -934,6 +942,7 @@ export interface GameStats {
     total: number;
     completed: number;
     playing: number;
+    played: number;
     dropped: number;
     sandbox: number;
     wishlist: number;

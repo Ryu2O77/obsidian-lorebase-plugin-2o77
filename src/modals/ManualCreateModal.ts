@@ -513,6 +513,7 @@ export class ManualCreateModal extends Modal {
             return [
                 ['not_started', t('statusNotStarted')],
                 ['playing', t('statusPlaying')],
+                ['played', t('statusPartlyPlayed')],
                 ['completed', t('statusPlayed')],
                 ['dropped', t('statusDropped')],
                 ['wishlist', t('statusWishlist')],

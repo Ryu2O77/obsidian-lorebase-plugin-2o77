@@ -531,6 +531,7 @@ export class GameCard {
                 ? t('statusPlayed')
                 : isReadingMedia ? t('statusReadCompleted') : t('statusCompleted'),
             playing: t('statusPlaying'),
+            played: t('statusPartlyPlayed'),
             dropped: t('statusDropped'),
             sandbox: t('statusSandbox'),
             wishlist: t('statusWishlist'),

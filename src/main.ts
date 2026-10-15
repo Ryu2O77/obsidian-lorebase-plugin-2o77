@@ -1050,6 +1050,7 @@ export default class LorebasePlugin extends Plugin {
         }
 
         const gameItem = item;
+        const steamAppIdForSync = Number(gameItem.steamAppId ?? (gameItem.integrationProvider === 'steam' ? gameItem.integrationId : '')) || 0;
         const seriesOptions = this.gameService?.getSeriesList() ?? [];
         const modal: EditModal = new EditModal(
             this.app,
@@ -1085,7 +1086,10 @@ export default class LorebasePlugin extends Plugin {
                 true,
                 onSave,
                 () => modal.saveBeforeSourceRefresh()
-            )
+            ),
+            steamAppIdForSync && this.steamSyncService
+                ? () => this.steamSyncService!.fetchGameStats(this.settings.steamSync, steamAppIdForSync)
+                : undefined
         );
         modal.open();
     }

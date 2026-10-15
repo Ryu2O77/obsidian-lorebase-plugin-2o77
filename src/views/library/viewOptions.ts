@@ -36,6 +36,7 @@ export function getStatusOptionsForMediaType(
     return [
         { status: 'completed', label: labelFor('completed', t('statusPlayed')) },
         { status: 'playing', label: labelFor('playing', t('statusPlaying')) },
+        { status: 'played', label: labelFor('played', t('statusPartlyPlayed')) },
         { status: 'dropped', label: labelFor('dropped', t('statusDropped')) },
         { status: 'wishlist', label: labelFor('wishlist', t('statusWishlist')) },
         { status: 'not_started', label: labelFor('not_started', t('statusNotStarted')) },

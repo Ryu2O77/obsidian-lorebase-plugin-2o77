@@ -837,7 +837,8 @@ export class LibraryView extends ItemView {
             this.filteredGames,
             this.viewState.group.mode,
             this.viewState.group.order,
-            locale
+            locale,
+            this.getStatusOptions()
         ));
         if (this.filteredGames.length > 100) {
             this.gridEl = createGrid({
@@ -888,7 +889,7 @@ export class LibraryView extends ItemView {
         const columns = resolveTableColumns(settings.table, available);
         const locale = i18n.getLanguage() === 'uk' ? 'uk-UA' : i18n.getLanguage() === 'ru' ? 'ru-RU' : 'en-US';
         const groups = this.viewState.group.mode !== 'none'
-            ? this.withGroupProgress(groupMediaItems(this.filteredGames, this.viewState.group.mode, this.viewState.group.order, locale))
+            ? this.withGroupProgress(groupMediaItems(this.filteredGames, this.viewState.group.mode, this.viewState.group.order, locale, this.getStatusOptions()))
             : null;
         const savedScroll = scrollMode === 'preserve' || scrollMode === 'position' ? (anchor?.scrollTop ?? this.contentEl.scrollTop) : 0;
 
@@ -2098,6 +2099,7 @@ export class LibraryView extends ItemView {
                 ? t('statusPlayed')
                 : isReadingMedia ? t('statusReadCompleted') : t('statusCompleted'),
             playing: t('statusPlaying'),
+            played: t('statusPartlyPlayed'),
             dropped: t('statusDropped'),
             sandbox: t('statusSandbox'),
             wishlist: t('statusWishlist'),

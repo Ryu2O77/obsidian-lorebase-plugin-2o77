@@ -47,6 +47,8 @@ function label(context: SettingsSectionContext, key: string): string {
             'Choose which Steam fields are written to notes.',
             'Выберите поля Steam для записи в заметки.',
         ],
+        achievements: ['Achievements', 'Достижения'],
+        achievementsDesc: ['Needs API key + public game details', 'Нужен API-ключ и открытые данные об играх'],
         playtime: ['Playtime', 'Playtime'],
         playtimeDesc: ['Library minutes', 'Минуты из библиотеки'],
         genres: ['Genres', 'Жанры'],
@@ -92,6 +94,8 @@ function label(context: SettingsSectionContext, key: string): string {
         ask: 'Запитувати',
         steamData: 'Дані Steam',
         steamDataDesc: 'Виберіть, які поля Steam записуються в нотатки.',
+        achievements: 'Досягнення',
+        achievementsDesc: 'Потрібен API-ключ і відкриті дані про ігри',
         playtime: 'Playtime',
         playtimeDesc: 'Хвилини з бібліотеки',
         genres: 'Жанри',
@@ -299,6 +303,10 @@ function renderImportTab(context: SettingsSectionContext, body: HTMLElement, sav
     const cards = fieldsPanel.createDiv({ cls: 'lorebase-steam-sync-card-grid is-compact' });
     createToggleCard(cards, 'clock', label(context, 'playtime'), '', settings.fields.playtime, async (value) => {
         settings.fields.playtime = value;
+        await save();
+    });
+    createToggleCard(cards, 'trophy', label(context, 'achievements'), label(context, 'achievementsDesc'), settings.fields.achievements, async (value) => {
+        settings.fields.achievements = value;
         await save();
     });
     createToggleCard(cards, 'tags', label(context, 'genres'), '', settings.fields.genres, async (value) => {

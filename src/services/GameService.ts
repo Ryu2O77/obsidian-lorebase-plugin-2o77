@@ -411,9 +411,7 @@ export class GameService {
             const statusRaw = typeof metadata.status === 'string' ? metadata.status.toLowerCase() : '';
             const statusNormalized = statusRaw.replace(/[-\s]+/g, '_');
             // @deprecated Legacy boolean status fallback kept for old notes.
-            if (statusNormalized === 'played') {
-                status = 'completed';
-            } else if (['completed', 'playing', 'dropped', 'sandbox', 'wishlist', 'not_started'].includes(statusNormalized)) {
+            if (['completed', 'playing', 'played', 'dropped', 'sandbox', 'wishlist', 'not_started'].includes(statusNormalized)) {
                 status = statusNormalized as GameStatus;
             } else if (isTruthy(metadata.played)) {
                 status = 'completed';
@@ -463,6 +461,14 @@ export class GameService {
                 releaseDate,
                 publisher,
                 developer,
+                hoursPlayed: this.readFrontmatterNumber(metadata, ['hours_played', 'hoursPlayed'])
+                    ?? (() => {
+                        // Steam Sync stores `playtime` in minutes; show it as hours until hours_played exists.
+                        const minutes = this.readFrontmatterNumber(metadata, ['playtime']);
+                        return minutes && minutes > 0 ? Math.round((minutes / 60) * 10) / 10 : null;
+                    })(),
+                trophiesCurrent: this.readFrontmatterNumber(metadata, ['trophies_current', 'trophiesCurrent']),
+                trophiesTotal: this.readFrontmatterNumber(metadata, ['trophies_total', 'trophiesTotal']),
                 tags,
                 genres,
                 platforms,
@@ -556,7 +562,7 @@ export class GameService {
     calculateStats(games: GameItem[]): GameStats {
         const stats: GameStats = {
             total: games.length,
-            completed: 0, playing: 0, dropped: 0, sandbox: 0, wishlist: 0, notStarted: 0,
+            completed: 0, playing: 0, played: 0, dropped: 0, sandbox: 0, wishlist: 0, notStarted: 0,
             favorite: 0, withRating: 0, avgRating: 0,
             customPosters: 0, adult: 0, seriesCount: 0,
             ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
@@ -572,6 +578,7 @@ export class GameService {
             switch (game.status) {
                 case 'completed': stats.completed++; break;
                 case 'playing': stats.playing++; break;
+                case 'played': stats.played++; break;
                 case 'dropped': stats.dropped++; break;
                 case 'sandbox': stats.sandbox++; break;
                 case 'wishlist': stats.wishlist++; break;
@@ -600,6 +607,7 @@ export class GameService {
                 stats.statusPercentages = {
                     completed: Math.round((stats.completed / stats.total) * 1000) / 10,
                     playing: Math.round((stats.playing / stats.total) * 1000) / 10,
+                    played: Math.round((stats.played / stats.total) * 1000) / 10,
                     dropped: Math.round((stats.dropped / stats.total) * 1000) / 10,
                     sandbox: Math.round((stats.sandbox / stats.total) * 1000) / 10,
                     wishlist: Math.round((stats.wishlist / stats.total) * 1000) / 10,
@@ -666,6 +674,9 @@ export class GameService {
         }
         if ('publisher' in updates) this.updateFrontmatterTextField(frontmatterUpdates, frontmatter, 'publisher', 'publishers', updates.publisher);
         if ('developer' in updates) this.updateFrontmatterTextField(frontmatterUpdates, frontmatter, 'developer', 'developers', updates.developer);
+        if ('hoursPlayed' in updates) frontmatterUpdates.hours_played = updates.hoursPlayed ?? null;
+        if ('trophiesCurrent' in updates) frontmatterUpdates.trophies_current = updates.trophiesCurrent ?? null;
+        if ('trophiesTotal' in updates) frontmatterUpdates.trophies_total = updates.trophiesTotal ?? null;
         if ('sourceUrl' in updates) frontmatterUpdates.url = updates.sourceUrl || null;
         if ('integrationProvider' in updates) frontmatterUpdates.integration_provider = updates.integrationProvider;
         if ('integrationId' in updates) frontmatterUpdates.integration_id = updates.integrationId;

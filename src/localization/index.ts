@@ -12,7 +12,7 @@ import { Language } from '../types';
 /** All available translation keys */
 export type TranslationKey =
     // Statuses
-    | 'statusPlayed' | 'statusPlaying' | 'statusDropped' | 'statusSandbox'
+    | 'statusPlayed' | 'statusPartlyPlayed' | 'statusPlaying' | 'statusDropped' | 'statusSandbox'
     | 'statusNotStarted' | 'statusWishlist' | 'statusFavorite'
     | 'statusPlanned' | 'statusWatching' | 'statusCompleted' | 'statusReadCompleted' | 'statusPaused'
     | 'statusPlanToRead' | 'statusReading'
@@ -197,7 +197,9 @@ export type TranslationKey =
     | 'tableOptionHint' | 'tableCreateOption'
     | 'cardHideStatus' | 'cardHideRating' | 'cardHideCompanions'
     | 'tableColName' | 'tableColStatus' | 'tableColRating' | 'tableColYear' | 'tableColStarted' | 'tableColFinished' | 'tableColTags' | 'tableColGenres' | 'tableColFavorite' | 'tableColCommunity' | 'tableColProgress' | 'tableColFranchise' | 'tableColPeople' | 'tableColPlatforms' | 'tableColCreators' | 'tableColArtists' | 'tableColScore' | 'viewTable' | 'tableColumns' | 'tableWrap' | 'tableReset' | 'tableShown' | 'tableAdd' | 'tableSearchFields' | 'tableMoveUp' | 'tableMoveDown' | 'tableGroupBuiltin' | 'tableGroupPeople' | 'tableGroupProperties' | 'editRelatedSuggested' | 'searchDirectorFilmography' | 'posterSize' | 'promptKeepPoster'
-    | 'bookCompleteAll' | 'mangaCompleteAll'
+    | 'bookCompleteAll' | 'mangaCompleteAll' | 'gameCompleteAll'
+    | 'editSteamSync' | 'editSteamSyncDone' | 'editSteamSyncFailed'
+    | 'editHoursPlayed' | 'editTrophiesCurrent' | 'editTrophiesTotal' | 'editTrophies' | 'editHoursShort'
     | 'posterUpload' | 'posterFromVault' | 'posterFromUrl' | 'posterRemove' | 'posterUrlPrompt'
     | 'posterSaveFailed' | 'posterVertical' | 'posterHorizontal' | 'commandRepairPosters' | 'repairPostersDone'
     | 'editWatchedWith' | 'editWatchedWithPlaceholder' | 'editFranchise' | 'editFranchisePlaceholder'
@@ -272,6 +274,7 @@ const EN: Record<TranslationKey, string> = {
     statusPlaying: 'Playing',
     statusDropped: 'Dropped',
     statusSandbox: 'Sandbox',
+    statusPartlyPlayed: 'Played',
     statusWishlist: 'Wishlist',
     statusNotStarted: 'Not started',
     statusFavorite: 'Favorite',
@@ -799,6 +802,15 @@ const EN: Record<TranslationKey, string> = {
     posterSize: 'Poster size',
     promptKeepPoster: 'Keep current poster',
     bookCompleteAll: 'Mark book as read',
+    gameCompleteAll: 'Mark all trophies earned',
+    editSteamSync: 'Sync hours & trophies from Steam',
+    editSteamSyncDone: 'Steam data loaded. Press Save to keep it.',
+    editSteamSyncFailed: 'Could not sync from Steam. Check your Steam ID and API key in Settings > Sync, and that your game details are public.',
+    editHoursPlayed: 'Hours played',
+    editTrophiesCurrent: 'Trophies (earned)',
+    editTrophiesTotal: 'Trophies (total)',
+    editTrophies: 'Trophies',
+    editHoursShort: 'Hours played',
     mangaCompleteAll: 'Mark all chapters read',
     posterUpload: 'Upload image',
     posterFromVault: 'Pick from vault',
@@ -1075,6 +1087,7 @@ const RU: Record<TranslationKey, string> = {
     statusPlaying: 'Играю',
     statusDropped: 'Заброшено',
     statusSandbox: 'Песочница',
+    statusPartlyPlayed: 'Играл',
     statusWishlist: 'Вишлист',
     statusNotStarted: 'Не начато',
     statusFavorite: 'Избранное',
@@ -1602,6 +1615,15 @@ const RU: Record<TranslationKey, string> = {
     posterSize: 'Размер постера',
     promptKeepPoster: 'Сохранить текущий постер',
     bookCompleteAll: 'Отметить книгу прочитанной',
+    gameCompleteAll: 'Отметить все трофеи полученными',
+    editSteamSync: 'Синхронизировать часы и трофеи из Steam',
+    editSteamSyncDone: 'Данные Steam загружены. Нажмите «Сохранить».',
+    editSteamSyncFailed: 'Не удалось синхронизировать со Steam. Проверьте Steam ID и API-ключ в Настройки > Sync и открытость данных об играх.',
+    editHoursPlayed: 'Часов сыграно',
+    editTrophiesCurrent: 'Трофеи (получено)',
+    editTrophiesTotal: 'Трофеи (всего)',
+    editTrophies: 'Трофеи',
+    editHoursShort: 'Часов сыграно',
     mangaCompleteAll: 'Отметить все главы прочитанными',
     posterUpload: 'Загрузить изображение',
     posterFromVault: 'Выбрать из хранилища',
@@ -1880,6 +1902,7 @@ const UK: Record<TranslationKey, string> = {
     statusPlaying: 'Граю',
     statusDropped: 'Покинуто',
     statusSandbox: 'Пісочниця',
+    statusPartlyPlayed: 'Грав',
     statusWishlist: 'Бажане',
     statusNotStarted: 'Не розпочато',
     statusFavorite: 'Обране',
@@ -2403,6 +2426,15 @@ const UK: Record<TranslationKey, string> = {
     posterSize: 'Розмір постера',
     promptKeepPoster: 'Зберегти поточний постер',
     bookCompleteAll: 'Позначити книгу прочитаною',
+    gameCompleteAll: 'Позначити всі трофеї отриманими',
+    editSteamSync: 'Синхронізувати години й трофеї зі Steam',
+    editSteamSyncDone: 'Дані Steam завантажено. Натисніть «Зберегти».',
+    editSteamSyncFailed: 'Не вдалося синхронізувати зі Steam. Перевірте Steam ID і API-ключ у Налаштування > Sync та відкритість даних про ігри.',
+    editHoursPlayed: 'Годин награно',
+    editTrophiesCurrent: 'Трофеї (отримано)',
+    editTrophiesTotal: 'Трофеї (усього)',
+    editTrophies: 'Трофеї',
+    editHoursShort: 'Годин награно',
     mangaCompleteAll: 'Позначити всі розділи прочитаними',
     posterUpload: 'Завантажити зображення',
     posterFromVault: 'Вибрати зі сховища',
@@ -2719,6 +2751,7 @@ class Localization {
         return {
             completed: this.t('statusCompleted'),
             playing: this.t('statusPlaying'),
+            played: this.t('statusPartlyPlayed'),
             dropped: this.t('statusDropped'),
             sandbox: this.t('statusSandbox'),
             wishlist: this.t('statusWishlist'),

@@ -14,7 +14,7 @@ import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
 import { extractMarkdownSection } from '../services/GameService';
 import { normalizeObsidianTag } from '../settings/settingsNormalization';
 import { RelatedMediaEditor } from './RelatedMediaEditor';
-import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
+import { bindDateTextInput, formatIsoForDisplay, getDatePlaceholder, HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
 import { mountPosterEditor, getPosterFolder } from './posterEditor';
 import { CompanionsEditor } from './CompanionsEditor';
 import { WATCHED_WITH_KEYS, collectVaultNames } from '../services/media/people';
@@ -57,6 +57,9 @@ export class EditModal extends Modal {
     private finished: string;
     private isAdult: boolean;
     private releaseDate: string;
+    private hoursPlayed: number | null;
+    private trophiesCurrent: number | null;
+    private trophiesTotal: number | null;
     private publisher: string;
     private developer: string;
     private tags: string[];
@@ -97,7 +100,8 @@ export class EditModal extends Modal {
         relatedCandidates: RelatedMediaLink[] = [],
         incomingRelated: RelatedMediaLink[] = [],
         private readonly onRefreshSource?: MediaSourceAction,
-        private readonly onChangeSource?: MediaSourceAction
+        private readonly onChangeSource?: MediaSourceAction,
+        private readonly onSyncSteam?: () => Promise<{ hoursPlayed: number | null; trophiesCurrent: number | null; trophiesTotal: number | null } | null>
     ) {
         super(app);
         this.game = game;
@@ -121,6 +125,9 @@ export class EditModal extends Modal {
         this.finished = this.normalizeDateInput(game.finished);
         this.isAdult = game.isAdult;
         this.releaseDate = this.normalizeDateInput(game.releaseDate);
+        this.hoursPlayed = game.hoursPlayed ?? null;
+        this.trophiesCurrent = game.trophiesCurrent ?? null;
+        this.trophiesTotal = game.trophiesTotal ?? null;
         this.publisher = game.publisher ?? '';
         this.developer = game.developer ?? '';
         this.tags = this.normalizeTags(game.tags ?? []);
@@ -321,6 +328,10 @@ export class EditModal extends Modal {
                                         <span class="lorebase-editmode-segment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${STATUS_CONFIG.playing.pathD}" /></svg></span>
                                         <span class="lorebase-editmode-segment-label">${t('statusPlaying')}</span>
                                     </button>
+                                    <button type="button" class="lorebase-editmode-segment" data-status="played">
+                                        <span class="lorebase-editmode-segment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${STATUS_CONFIG.played.pathD}" /></svg></span>
+                                        <span class="lorebase-editmode-segment-label">${t('statusPartlyPlayed')}</span>
+                                    </button>
                                     <button type="button" class="lorebase-editmode-segment" data-status="completed">
                                         <span class="lorebase-editmode-segment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${STATUS_CONFIG.completed.pathD}" /></svg></span>
                                         <span class="lorebase-editmode-segment-label">${t('statusPlayed')}</span>
@@ -395,6 +406,8 @@ export class EditModal extends Modal {
                     <aside class="lorebase-editmode-column lorebase-editmode-column-right">
                         <section class="lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-progress" data-component="ProgressPanel" data-mobile-pane="more">
                             <div class="lorebase-editmode-panel-title-row"><h3 class="lorebase-editmode-panel-title">${t('editProgress')}</h3></div>
+                            <div class="lorebase-reading-progress-meters" data-role="game-progress-meters"></div>
+                            <div class="lorebase-reading-progress-editor" data-role="game-progress-editor"></div>
                             <div class="lorebase-editmode-kv-list">
                                 <div class="lorebase-editmode-kv-row">
                                     <span class="lorebase-editmode-kv-key">${t('editProgressMain')}</span>
@@ -428,7 +441,7 @@ export class EditModal extends Modal {
                                         </button>
                                     </div>
                                 </div>
-                                <label class="lorebase-editmode-field"><span class="lorebase-editmode-field-label">${t('editReleaseDate')}</span><input class="lorebase-editmode-input" data-field="release-date" type="date" /></label>
+                                <label class="lorebase-editmode-field"><span class="lorebase-editmode-field-label">${t('editReleaseDate')}</span><input class="lorebase-editmode-input" data-field="release-date" type="text" inputmode="numeric" maxlength="10" /></label>
                                 <label class="lorebase-editmode-field"><span class="lorebase-editmode-field-label">${t('editPublisher')}</span><input class="lorebase-editmode-input" data-field="publisher" type="text" placeholder="${t('editPublisher')}" /></label>
                                 <label class="lorebase-editmode-field"><span class="lorebase-editmode-field-label">${t('editDeveloper')}</span><input class="lorebase-editmode-input" data-field="developer" type="text" placeholder="${t('editDeveloper')}" /></label>
                                 <div class="lorebase-editmode-path-row">
@@ -525,8 +538,9 @@ export class EditModal extends Modal {
         const releaseDateInput = this.qs<HTMLInputElement>(root, '[data-field="release-date"]');
         if (releaseDateInput) {
             const releaseDateValue = this.releaseDate || this.getFrontmatterValue(frontmatter, ['releaseDate', 'release_date', 'released', 'release']) || '';
-            releaseDateInput.value = this.normalizeDateInput(releaseDateValue);
-            this.releaseDate = releaseDateInput.value;
+            this.releaseDate = this.normalizeDateInput(releaseDateValue);
+            releaseDateInput.placeholder = getDatePlaceholder();
+            releaseDateInput.value = formatIsoForDisplay(this.releaseDate);
         }
 
         const publisherInput = this.qs<HTMLInputElement>(root, '[data-field="publisher"]');
@@ -909,6 +923,139 @@ export class EditModal extends Modal {
         this.setProgressValue(root, '[data-role="progress-main"]', main);
         this.setProgressValue(root, '[data-role="progress-main-plus-sides"]', mainPlusSides);
         this.setProgressValue(root, '[data-role="progress-completionist"]', perfectionist);
+
+        this.renderGameProgress(root);
+    }
+
+    private parseProgressNumber(raw: string, integer: boolean): number | null {
+        const value = Number(raw.trim().replace(',', '.'));
+        if (!raw.trim() || !Number.isFinite(value) || value < 0) return null;
+        return integer ? Math.floor(value) : Math.round(value * 100) / 100;
+    }
+
+    private renderGameProgress(root: HTMLElement): void {
+        const meters = this.qs<HTMLElement>(root, '[data-role="game-progress-meters"]');
+        const editor = this.qs<HTMLElement>(root, '[data-role="game-progress-editor"]');
+        if (!meters || !editor) return;
+        meters.empty();
+        editor.empty();
+
+        this.createHoursStat(meters);
+        this.createGameMeter(meters, 'trophies', t('editTrophies'), this.trophiesCurrent, this.trophiesTotal, '#ffb02e');
+
+        const addNumber = (label: string, value: number | null, integer: boolean, onChange: (value: number | null) => void): void => {
+            const field = editor.createDiv({ cls: 'lorebase-reading-progress-field lorebase-reading-progress-number-field' });
+            field.createDiv({ cls: 'lorebase-editmode-field-label', text: label });
+            const input = field.createEl('input', {
+                cls: 'lorebase-editmode-input',
+                attr: { type: 'number', inputmode: integer ? 'numeric' : 'decimal', min: '0', step: integer ? '1' : '0.5' },
+            });
+            input.value = value !== null ? String(value) : '';
+            input.addEventListener('input', () => onChange(this.parseProgressNumber(input.value, integer)));
+        };
+        addNumber(t('editHoursPlayed'), this.hoursPlayed, false, (value) => {
+            this.hoursPlayed = value;
+            this.updateHoursStat(root);
+        });
+        addNumber(t('editTrophiesCurrent'), this.trophiesCurrent, true, (value) => {
+            this.trophiesCurrent = value;
+            this.updateGameMeter(root, 'trophies', this.trophiesCurrent, this.trophiesTotal);
+        });
+        addNumber(t('editTrophiesTotal'), this.trophiesTotal, true, (value) => {
+            this.trophiesTotal = value;
+            this.updateGameMeter(root, 'trophies', this.trophiesCurrent, this.trophiesTotal);
+        });
+
+        if (this.onSyncSteam) {
+            const syncButton = editor.createEl('button', {
+                cls: 'lorebase-btn lorebase-complete-all',
+                text: t('editSteamSync'),
+                attr: { type: 'button' },
+            });
+            syncButton.addEventListener('click', () => {
+                syncButton.disabled = true;
+                void this.onSyncSteam?.()
+                    .then((stats) => {
+                        if (!stats) {
+                            new Notice(t('editSteamSyncFailed'));
+                            return;
+                        }
+                        if (stats.hoursPlayed !== null) this.hoursPlayed = stats.hoursPlayed;
+                        if (stats.trophiesTotal !== null) {
+                            this.trophiesCurrent = stats.trophiesCurrent;
+                            this.trophiesTotal = stats.trophiesTotal;
+                        }
+                        this.renderGameProgress(root);
+                        new Notice(t('editSteamSyncDone'));
+                    })
+                    .catch(() => new Notice(t('editSteamSyncFailed')))
+                    .finally(() => { syncButton.disabled = false; });
+            });
+        }
+
+        const button = editor.createEl('button', {
+            cls: 'lorebase-btn lorebase-complete-all',
+            text: `\u2713 ${t('gameCompleteAll')}`,
+            attr: { type: 'button' },
+        });
+        button.addEventListener('click', () => {
+            this.completeAllProgress(root);
+            this.selectedStatus = 'completed';
+            if (!this.finished) {
+                this.finished = this.getTodayDateInput();
+                const finished = this.qs<HTMLInputElement>(root, '[data-field="finished-date"]');
+                if (finished) this.syncDateInput(finished, this.finished);
+            }
+            this.updateQuickSettingSwitches(root);
+            this.updateStatusUI(root);
+        });
+    }
+
+    /** Fills the trophies to their total (hours are left untouched). */
+    private completeAllProgress(root: HTMLElement): void {
+        if (this.trophiesTotal) this.trophiesCurrent = this.trophiesTotal;
+        this.renderGameProgress(root);
+    }
+
+    /** Hours have no fixed total, so they get a plain stat tile instead of a progress ring. */
+    private createHoursStat(container: HTMLElement): void {
+        const stat = container.createDiv({ cls: 'lorebase-game-hours-stat', attr: { 'data-progress-kind': 'hours' } });
+        setIcon(stat.createDiv({ cls: 'lorebase-game-hours-icon' }), 'clock');
+        const body = stat.createDiv({ cls: 'lorebase-game-hours-body' });
+        const value = body.createDiv({ cls: 'lorebase-game-hours-value' });
+        value.createSpan({ cls: 'lorebase-game-hours-number' });
+        value.createSpan({ cls: 'lorebase-game-hours-unit', text: ' h' });
+        body.createDiv({ cls: 'lorebase-reading-progress-label', text: t('editHoursShort') });
+        this.updateHoursStat(container);
+    }
+
+    private updateHoursStat(root: HTMLElement): void {
+        const node = this.qs<HTMLElement>(root, '.lorebase-game-hours-number');
+        if (node) node.textContent = this.hoursPlayed !== null ? String(this.hoursPlayed) : '0';
+    }
+
+    private createGameMeter(container: HTMLElement, kind: string, label: string, current: number | null, total: number | null, color: string): void {
+        const meter = container.createDiv({ cls: 'lorebase-reading-progress-meter', attr: { 'data-progress-kind': kind } });
+        meter.style.setProperty('--reading-progress-color', color);
+        meter.createDiv({ cls: 'lorebase-reading-progress-ring' });
+        const body = meter.createDiv({ cls: 'lorebase-reading-progress-body' });
+        const count = body.createDiv({ cls: 'lorebase-reading-progress-count' });
+        count.createSpan({ cls: 'lorebase-reading-progress-current' });
+        count.createSpan({ cls: 'lorebase-reading-progress-total' });
+        body.createDiv({ cls: 'lorebase-reading-progress-label', text: label });
+        this.updateGameMeter(container, kind, current, total);
+    }
+
+    private updateGameMeter(root: HTMLElement, kind: string, current: number | null, total: number | null): void {
+        const meter = this.qs<HTMLElement>(root, `[data-progress-kind="${kind}"]`);
+        if (!meter) return;
+        const percent = total && total > 0 ? Math.max(0, Math.min(100, Math.round(((current ?? 0) / total) * 100))) : 0;
+        meter.style.setProperty('--reading-progress', `${percent}%`);
+        const currentNode = this.qs<HTMLElement>(meter, '.lorebase-reading-progress-current');
+        const totalNode = this.qs<HTMLElement>(meter, '.lorebase-reading-progress-total');
+        if (currentNode) currentNode.textContent = String(current ?? 0);
+        // Hours have no fixed total unless HowLongToBeat gave one; trophies always show "/ ?" until set.
+        if (totalNode) totalNode.textContent = total ? ` / ${total}` : (kind === 'hours' ? '' : ' / ?');
     }
 
     private bindAdvanced(root: HTMLElement): void {
@@ -919,10 +1066,9 @@ export class EditModal extends Modal {
         });
 
         const releaseDateInput = this.qs<HTMLInputElement>(root, '[data-field="release-date"]');
-        releaseDateInput?.addEventListener('change', () => {
-            this.releaseDate = this.normalizeDateInput(releaseDateInput.value);
-            releaseDateInput.value = this.releaseDate;
-        });
+        if (releaseDateInput) {
+            bindDateTextInput(releaseDateInput, this.releaseDate, (iso) => { this.releaseDate = iso; });
+        }
 
         const publisherInput = this.qs<HTMLInputElement>(root, '[data-field="publisher"]');
         publisherInput?.addEventListener('input', () => {
@@ -1501,13 +1647,8 @@ export class EditModal extends Modal {
 
     private syncDateInput(input: HTMLInputElement, value: string): void {
         const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-        const isDayFirst = i18n.getLanguage() === 'ru' || i18n.getLanguage() === 'uk';
-        input.placeholder = isDayFirst ? 'дд.мм.гггг' : 'mm/dd/yyyy';
-        input.value = match
-            ? isDayFirst
-                ? `${match[3]}.${match[2]}.${match[1]}`
-                : `${match[2]}/${match[3]}/${match[1]}`
-            : '';
+        input.placeholder = getDatePlaceholder();
+        input.value = formatIsoForDisplay(value);
         input.toggleClass('is-empty', !match);
     }
 
@@ -1568,6 +1709,9 @@ export class EditModal extends Modal {
             finished: this.finished || null,
             publisher: this.publisher.trim(),
             developer: this.developer.trim(),
+            hoursPlayed: this.hoursPlayed,
+            trophiesCurrent: this.trophiesCurrent,
+            trophiesTotal: this.trophiesTotal,
             dlc: this.dlc,
             relatedMedia: this.relatedMediaEditor.getValue(),
             myNotes: this.myNotes,

@@ -618,7 +618,7 @@ export class ReadingEditModal extends Modal {
         if (this.item.type === 'book') {
             this.setText(root, '[data-role="progress-summary"]', 'PAGES');
             this.createProgressMeter(meters, 'pages', t('templateFieldPageCurrent'), this.pageCurrent, this.pageTotal, '#26c6da');
-            this.createProgressMeter(meters, 'book-chapters', t('templateFieldChapterCurrent'), this.bookChapterCurrent, this.bookChapterTotal, '#ffb02e');
+            this.createProgressMeter(meters, 'book-chapters', t('templateFieldChapterCurrent'), this.bookChapterCurrent, this.bookChapterTotal, '#26c6da');
             this.createStepper(editor, t('editPageCurrent'), this.pageCurrent, () => this.pageTotal, (value) => {
                 this.pageCurrent = value;
                 this.syncProgressView(root);

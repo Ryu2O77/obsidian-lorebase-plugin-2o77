@@ -1,6 +1,7 @@
 import { getCompanionStatusLabels } from '../views/library/companionLabels';
 import { App, Modal, Notice } from 'obsidian';
 import { t } from '../localization';
+import { bindDateTextInput } from './HierarchicalDatePicker';
 import type { CompanionStatus, MediaType } from '../types';
 import { COMPANION_STATUSES, collectVaultNames, FRANCHISE_KEYS, parseHalfRating, parseNameList, PLATFORM_KEYS, WATCHED_WITH_KEYS } from '../services/media/people';
 import { hasMassChanges, MassEditChanges, supportsCompanions, supportsPeopleFields } from '../views/library/massEdit';
@@ -24,7 +25,7 @@ export class MassEditModal extends Modal {
     private statusOptions(): Array<[string, string]> {
         if (this.mediaType === 'game') {
             return [
-                ['not_started', t('statusNotStarted')], ['playing', t('statusPlaying')], ['completed', t('statusPlayed')],
+                ['not_started', t('statusNotStarted')], ['playing', t('statusPlaying')], ['played', t('statusPartlyPlayed')], ['completed', t('statusPlayed')],
                 ['dropped', t('statusDropped')], ['wishlist', t('statusWishlist')], ['sandbox', t('statusSandbox')],
             ];
         }
@@ -76,7 +77,9 @@ export class MassEditModal extends Modal {
         finishToday.createSpan({ text: t('massFinishToday') });
         const dateRow = finishHost.createDiv({ cls: 'lorebase-add-option-row' });
         dateRow.createSpan({ text: t('massSetDate') });
-        const dateInput = dateRow.createEl('input', { cls: 'lorebase-editmode-input', attr: { type: 'date' } });
+        const dateInput = dateRow.createEl('input', { cls: 'lorebase-editmode-input', attr: { type: 'text' } });
+        let finishedIso = '';
+        bindDateTextInput(dateInput, '', (iso) => { finishedIso = iso; });
         const clearDate = finishHost.createEl('label', { cls: 'lorebase-add-option-row' });
         const clearDateBox = clearDate.createEl('input', { attr: { type: 'checkbox' } });
         clearDate.createSpan({ text: t('massClearDate') });
@@ -127,7 +130,7 @@ export class MassEditModal extends Modal {
             if (favoriteSel.value) changes.favorite = favoriteSel.value === 'on';
             if (finishTodayBox.checked) changes.finishToday = true;
             if (clearDateBox.checked) changes.finished = null;
-            else if (dateInput.value) changes.finished = dateInput.value;
+            else if (finishedIso) changes.finished = finishedIso;
             const addTags = parseNameList(tagsAdd.value);
             const removeTags = parseNameList(tagsRemove.value);
             if (addTags.length) changes.tagsAdd = addTags;

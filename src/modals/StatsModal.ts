@@ -172,6 +172,7 @@ export class StatsModal extends Modal {
             : [
                 { key: 'completed', icon: '\u{2705}', label: t('statusPlayed'), value: (this.stats as GameStats).completed, color: '#4caf50' },
                 { key: 'playing', icon: '\u{1F3AE}', label: t('statusPlaying'), value: (this.stats as GameStats).playing, color: '#2196f3' },
+                { key: 'played', icon: '\u{1F579}\u{FE0F}', label: t('statusPartlyPlayed'), value: (this.stats as GameStats).played, color: '#b388ff' },
                 { key: 'dropped', icon: '\u{1F6AB}', label: t('statusDropped'), value: (this.stats as GameStats).dropped, color: '#ff9800' },
                 { key: 'wishlist', icon: '\u{1F516}', label: t('statusWishlist'), value: (this.stats as GameStats).wishlist, color: 'var(--lorebase-wishlist-color)' },
                 { key: 'sandbox', icon: '\u{1F9E9}', label: t('statusSandbox'), value: (this.stats as GameStats).sandbox, color: '#ffeb3b' },
