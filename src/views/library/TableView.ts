@@ -4,6 +4,7 @@ import type { CompanionStatus, MediaItem, TableViewConfig } from '../../types';
 import { COMPANION_STATUSES } from '../../services/media/people';
 import { OptionPicker } from './OptionPicker';
 import type { OptionColor } from './tagColors';
+import { bindDateTextInput, formatIsoForDisplay } from '../../modals/HierarchicalDatePicker';
 import {
     CellValue, MIN_COLUMN_WIDTH, TableColumnDef, TableLabels, columnWidth, findCompanion, getCellValue,
 } from './tableColumns';
@@ -235,7 +236,8 @@ export class TableView {
         const editable = (column.kind === 'date' || column.kind === 'number' || column.kind === 'text')
             && this.options.isTextEditable(item, column);
         if (value !== null && value !== undefined && value !== '') {
-            cell.createSpan({ cls: 'lorebase-table-text', text: String(value) });
+            const text = column.kind === 'date' ? (formatIsoForDisplay(String(value)) || String(value)) : String(value);
+            cell.createSpan({ cls: 'lorebase-table-text', text });
         }
         if (!editable) return;
         cell.addClass('is-editable');
@@ -249,31 +251,43 @@ export class TableView {
     private editTextCell(cell: HTMLElement, item: MediaItem, column: TableColumnDef, value: CellValue): void {
         if (cell.querySelector('input')) return;
         cell.empty();
-        const inputType = column.kind === 'date' ? 'date' : column.kind === 'number' ? 'number' : 'text';
+        const isDate = column.kind === 'date';
+        const inputType = isDate ? 'text' : column.kind === 'number' ? 'number' : 'text';
         const input = cell.createEl('input', {
             cls: 'lorebase-table-edit-input',
-            attr: { type: inputType, value: value === null || value === undefined ? '' : String(value) },
+            attr: { type: inputType, value: isDate ? '' : (value === null || value === undefined ? '' : String(value)) },
         });
-        let settled = false;
-        const commit = (): void => {
-            if (settled) return;
-            settled = true;
-            const raw = input.value.trim();
-            const next: string | number | null = raw === '' ? null : (column.kind === 'number' ? Number(raw) : raw);
-            this.options.onTextChange(item, column, next);
-        };
+        let cancelled = false;
         const cancel = (): void => {
-            if (settled) return;
-            settled = true;
+            if (cancelled) return;
+            cancelled = true;
             this.renderCell(cell, item, column);
         };
+
+        if (isDate) {
+            // Same dd/mm/yyyy text field used by every other editor, instead of the native date picker.
+            bindDateTextInput(input, value === null || value === undefined ? '' : String(value), (iso) => {
+                if (cancelled) return;
+                this.options.onTextChange(item, column, iso === '' ? null : iso);
+            });
+        } else {
+            let committed = false;
+            const commit = (): void => {
+                if (cancelled || committed) return;
+                committed = true;
+                const raw = input.value.trim();
+                const next: string | number | null = raw === '' ? null : (column.kind === 'number' ? Number(raw) : raw);
+                this.options.onTextChange(item, column, next);
+            };
+            input.addEventListener('blur', commit);
+        }
+
         input.addEventListener('keydown', (event) => {
             event.stopPropagation();
             if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
             else if (event.key === 'Escape') { event.preventDefault(); cancel(); }
         });
         input.addEventListener('click', (event) => event.stopPropagation());
-        input.addEventListener('blur', commit);
         window.setTimeout(() => input.focus(), 0);
     }
 

@@ -13034,6 +13034,8 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-table-pill.is-status-planned, .lorebase-table-pill.is-status-wishlist, .lorebase-table-pill.is-status-backlog { background: rgba(var(--color-purple-rgb, 140, 100, 200), 0.25); }
 .lorebase-table-pill.is-status-dropped { background: rgba(var(--color-red-rgb, 200, 70, 70), 0.28); }
 .lorebase-table-pill.is-status-paused, .lorebase-table-pill.is-status-on_hold { background: rgba(var(--color-orange-rgb, 210, 150, 60), 0.28); }
+.lorebase-table-pill.is-status-played { background: rgba(179, 136, 255, 0.28); }
+.lorebase-table-pill.is-status-sandbox { background: rgba(255, 235, 59, 0.25); }
 
 .lorebase-table-score { color: var(--color-yellow, #e0b43a); letter-spacing: 1px; }
 .lorebase-table-score.is-person { color: var(--color-orange, #d8944a); }
