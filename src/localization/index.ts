@@ -194,7 +194,7 @@ export type TranslationKey =
     | 'autoFillClose' | 'autoFillRunning' | 'autoFillLinked' | 'autoFillReview'
     | 'autoFillNotFound' | 'autoFillFailed' | 'autoFillNothing'
     | 'settingsStartCategory' | 'settingsStartCategoryDesc' | 'settingsStartLast'
-    | 'tableOptionHint' | 'tableCreateOption'
+    | 'tableOptionHint' | 'tableCreateOption' | 'tableOpenCalendar'
     | 'cardHideStatus' | 'cardHideRating' | 'cardHideCompanions'
     | 'tableColName' | 'tableColStatus' | 'tableColRating' | 'tableColYear' | 'tableColStarted' | 'tableColFinished' | 'tableColTags' | 'tableColGenres' | 'tableColFavorite' | 'tableColCommunity' | 'tableColProgress' | 'tableColFranchise' | 'tableColPeople' | 'tableColPlatforms' | 'tableColCreators' | 'tableColArtists' | 'tableColScore' | 'viewTable' | 'tableColumns' | 'tableWrap' | 'tableReset' | 'tableShown' | 'tableAdd' | 'tableSearchFields' | 'tableMoveUp' | 'tableMoveDown' | 'tableGroupBuiltin' | 'tableGroupPeople' | 'tableGroupProperties' | 'editRelatedSuggested' | 'searchDirectorFilmography' | 'posterSize' | 'promptKeepPoster'
     | 'bookCompleteAll' | 'mangaCompleteAll' | 'gameCompleteAll'
@@ -765,6 +765,7 @@ const EN: Record<TranslationKey, string> = {
     settingsStartLast: 'Last used',
     tableOptionHint: 'Select an option or create one',
     tableCreateOption: 'Create',
+    tableOpenCalendar: 'Open calendar',
     cardHideStatus: 'Hide status',
     cardHideRating: 'Hide rating',
     cardHideCompanions: 'Hide "Status for"',
@@ -1578,6 +1579,7 @@ const RU: Record<TranslationKey, string> = {
     settingsStartLast: 'Последняя использованная',
     tableOptionHint: 'Выберите вариант или создайте новый',
     tableCreateOption: 'Создать',
+    tableOpenCalendar: 'Открыть календарь',
     cardHideStatus: 'Скрыть статус',
     cardHideRating: 'Скрыть оценку',
     cardHideCompanions: 'Скрыть «Статус для»',
@@ -2389,6 +2391,7 @@ const UK: Record<TranslationKey, string> = {
     settingsStartLast: 'Остання використана',
     tableOptionHint: 'Виберіть варіант або створіть новий',
     tableCreateOption: 'Створити',
+    tableOpenCalendar: 'Відкрити календар',
     cardHideStatus: 'Сховати статус',
     cardHideRating: 'Сховати оцінку',
     cardHideCompanions: 'Сховати «Статус для»',

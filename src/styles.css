@@ -13124,6 +13124,13 @@ button.lorebase-steamgriddb-chevron.is-open {
     background: var(--background-primary);
     color: var(--text-normal);
 }
+.lorebase-table-edit-input.is-date { padding-left: 24px; }
+
+/* Compact calendar trigger for the table's inline date editor, reusing the editor's own popover widget. */
+.lorebase-table-date-control.lorebase-editmode-date-control { display: block; width: 100%; }
+.lorebase-table-date-control .lorebase-editmode-date-control-icon {
+    width: 18px; height: 18px; min-width: 18px; min-height: 18px; padding: 3px; left: 2px;
+}
 
 .lorebase-editmode-related-suggestions { margin-bottom: 6px; }
 .lorebase-editmode-related-suggestions:empty { display: none; }

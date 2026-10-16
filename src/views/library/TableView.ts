@@ -4,7 +4,7 @@ import type { CompanionStatus, MediaItem, TableViewConfig } from '../../types';
 import { COMPANION_STATUSES } from '../../services/media/people';
 import { OptionPicker } from './OptionPicker';
 import type { OptionColor } from './tagColors';
-import { bindDateTextInput, formatIsoForDisplay } from '../../modals/HierarchicalDatePicker';
+import { formatIsoForDisplay, HierarchicalDatePicker } from '../../modals/HierarchicalDatePicker';
 import {
     CellValue, MIN_COLUMN_WIDTH, TableColumnDef, TableLabels, columnWidth, findCompanion, getCellValue,
 } from './tableColumns';
@@ -254,25 +254,47 @@ export class TableView {
         if (cell.querySelector('input')) return;
         cell.empty();
         const isDate = column.kind === 'date';
-        const inputType = isDate ? 'text' : column.kind === 'number' ? 'number' : 'text';
-        const input = cell.createEl('input', {
-            cls: 'lorebase-table-edit-input',
-            attr: { type: inputType, value: isDate ? '' : (value === null || value === undefined ? '' : String(value)) },
-        });
+        const initialIso = value === null || value === undefined ? '' : String(value);
+
         let cancelled = false;
+        let datePicker: HierarchicalDatePicker | null = null;
         const cancel = (): void => {
             if (cancelled) return;
             cancelled = true;
+            datePicker?.destroy();
             this.renderCell(cell, item, column);
         };
 
+        let input: HTMLInputElement;
         if (isDate) {
-            // Same dd/mm/yyyy text field used by every other editor, instead of the native date picker.
-            bindDateTextInput(input, value === null || value === undefined ? '' : String(value), (iso) => {
-                if (cancelled) return;
-                this.options.onTextChange(item, column, iso === '' ? null : iso);
+            // Same calendar popover used by every other editor, instead of the native date picker.
+            const control = cell.createDiv({ cls: 'lorebase-editmode-date-control lorebase-table-date-control' });
+            const trigger = control.createEl('button', {
+                cls: 'lorebase-editmode-date-control-icon',
+                attr: { type: 'button', 'aria-label': t('tableOpenCalendar') },
             });
+            setIcon(trigger, 'calendar-days');
+            input = control.createEl('input', { cls: 'lorebase-table-edit-input is-date', attr: { type: 'text' } });
+
+            let currentIso = initialIso;
+            datePicker = new HierarchicalDatePicker(
+                input,
+                trigger,
+                () => currentIso,
+                (iso) => {
+                    currentIso = iso;
+                    if (cancelled) return;
+                    this.options.onTextChange(item, column, iso === '' ? null : iso);
+                }
+            );
+            datePicker.syncInput(initialIso);
+            input.addEventListener('blur', () => datePicker?.destroy());
         } else {
+            const inputType = column.kind === 'number' ? 'number' : 'text';
+            input = cell.createEl('input', {
+                cls: 'lorebase-table-edit-input',
+                attr: { type: inputType, value: initialIso },
+            });
             let committed = false;
             const commit = (): void => {
                 if (cancelled || committed) return;
@@ -286,7 +308,7 @@ export class TableView {
 
         input.addEventListener('keydown', (event) => {
             event.stopPropagation();
-            if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+            if (event.key === 'Enter' && !isDate) { event.preventDefault(); input.blur(); }
             else if (event.key === 'Escape') { event.preventDefault(); cancel(); }
         });
         input.addEventListener('click', (event) => event.stopPropagation());
