@@ -1,12 +1,12 @@
 import { Menu, setIcon } from 'obsidian';
 import { t } from '../../localization';
-import type { CompanionStatus, MediaItem, TableViewConfig } from '../../types';
+import type { CompanionStatus, MediaItem, SortField, SortOrder, TableViewConfig } from '../../types';
 import { COMPANION_STATUSES } from '../../services/media/people';
 import { OptionPicker } from './OptionPicker';
 import type { OptionColor } from './tagColors';
 import { formatIsoForDisplay, HierarchicalDatePicker } from '../../modals/HierarchicalDatePicker';
 import {
-    CellValue, MIN_COLUMN_WIDTH, TableColumnDef, TableLabels, columnWidth, findCompanion, getCellValue,
+    CellValue, MIN_COLUMN_WIDTH, TableColumnDef, TableLabels, columnWidth, findCompanion, getCellValue, sortFieldForColumn,
 } from './tableColumns';
 
 export interface TableGroup {
@@ -24,6 +24,8 @@ export interface TableViewOptions {
     statusOptions: Array<{ status: string; label: string }>;
     companionLabels: Record<CompanionStatus, string>;
     halfRatings: boolean;
+    currentSort: { field: SortField; order: SortOrder };
+    onSortChange: (field: SortField, order: SortOrder) => void;
     isSelected: (item: MediaItem) => boolean;
     onOpen: (item: MediaItem) => void;
     onContextMenu: (item: MediaItem, x: number, y: number) => void;
@@ -41,6 +43,10 @@ export interface TableViewOptions {
     /** Whether a date/number/text column can be edited in place for this item */
     isTextEditable: (item: MediaItem, column: TableColumnDef) => boolean;
     onTextChange: (item: MediaItem, column: TableColumnDef, value: string | number | null) => void;
+    /** Called right as an in-cell edit commits, so the next render can briefly flash that cell. */
+    onCellSaved: (item: MediaItem, column: TableColumnDef) => void;
+    /** Whether this cell was the one just edited (drives the save-flash animation on the next render). */
+    isJustSaved: (item: MediaItem, column: TableColumnDef) => boolean;
 }
 
 export function buildTableLabels(): TableLabels {
@@ -110,7 +116,24 @@ export class TableView {
         const headRow = this.tableEl.createEl('thead').createEl('tr');
         for (const column of columns) {
             const th = headRow.createEl('th', { cls: 'lorebase-table-th' });
-            th.createSpan({ cls: 'lorebase-table-th-label', text: column.label, attr: { title: column.label } });
+            const sortField = sortFieldForColumn(column);
+            if (sortField) {
+                const isActive = this.options.currentSort.field === sortField;
+                const sortBtn = th.createEl('button', {
+                    cls: `lorebase-table-th-sort ${isActive ? 'is-active' : ''}`,
+                    attr: { type: 'button', 'aria-label': t('tableSortBy').replace('{column}', column.label) },
+                });
+                sortBtn.createSpan({ cls: 'lorebase-table-th-label', text: column.label, attr: { title: column.label } });
+                const arrow = sortBtn.createSpan({ cls: 'lorebase-table-th-arrow' });
+                setIcon(arrow, isActive && this.options.currentSort.order === 'desc' ? 'arrow-down' : 'arrow-up');
+                if (!isActive) arrow.addClass('is-idle');
+                sortBtn.addEventListener('click', () => {
+                    const nextOrder: SortOrder = isActive && this.options.currentSort.order === 'asc' ? 'desc' : 'asc';
+                    this.options.onSortChange(sortField, nextOrder);
+                });
+            } else {
+                th.createSpan({ cls: 'lorebase-table-th-label', text: column.label, attr: { title: column.label } });
+            }
             const handle = th.createDiv({ cls: 'lorebase-table-resize', attr: { 'aria-hidden': 'true' } });
             this.bindResize(handle, column);
         }
@@ -178,6 +201,7 @@ export class TableView {
         for (const column of this.options.columns) {
             const cell = row.createEl('td', { cls: `lorebase-table-cell is-${column.kind}` });
             this.renderCell(cell, item, column);
+            if (this.options.isJustSaved(item, column)) cell.addClass('lorebase-cell-just-saved');
         }
     }
 
@@ -196,19 +220,19 @@ export class TableView {
             case 'status': {
                 const status = String(value ?? '');
                 const label = this.options.statusOptions.find((option) => option.status === status)?.label ?? status;
-                this.renderStatusPill(cell, status, label, (event) => this.pickStatus(event, item));
+                this.renderStatusPill(cell, status, label, (event) => this.pickStatus(event, item, column));
                 return;
             }
             case 'personStatus': {
                 const status = typeof value === 'string' ? value : '';
-                this.renderStatusPill(cell, status, status ? this.options.companionLabels[status as CompanionStatus] ?? status : '', (event) => this.pickPersonStatus(event, item, column.person ?? ''));
+                this.renderStatusPill(cell, status, status ? this.options.companionLabels[status as CompanionStatus] ?? status : '', (event) => this.pickPersonStatus(event, item, column.person ?? '', column));
                 return;
             }
             case 'rating':
-                this.renderScore(cell, typeof value === 'number' ? value : null, (event) => this.pickRating(event, item));
+                this.renderScore(cell, typeof value === 'number' ? value : null, (event) => this.pickRating(event, item, column));
                 return;
             case 'personRating':
-                this.renderScore(cell, typeof value === 'number' ? value : null, (event) => this.pickPersonRating(event, item, column.person ?? ''), true);
+                this.renderScore(cell, typeof value === 'number' ? value : null, (event) => this.pickPersonRating(event, item, column.person ?? '', column), true);
                 return;
             case 'boolean': {
                 const checked = value === true;
@@ -220,6 +244,7 @@ export class TableView {
                     cell.addEventListener('click', (event) => {
                         event.stopPropagation();
                         this.options.onUpdate(item, { favorite: !item.favorite });
+                        this.options.onCellSaved(item, column);
                     });
                 }
                 return;
@@ -287,6 +312,7 @@ export class TableView {
                     currentIso = iso;
                     if (cancelled) return;
                     this.options.onTextChange(item, column, iso === '' ? null : iso);
+                    this.options.onCellSaved(item, column);
                 }
             );
             datePicker.syncInput(initialIso);
@@ -304,6 +330,7 @@ export class TableView {
                 const raw = input.value.trim();
                 const next: string | number | null = raw === '' ? null : (column.kind === 'number' ? Number(raw) : raw);
                 this.options.onTextChange(item, column, next);
+                this.options.onCellSaved(item, column);
             };
             input.addEventListener('blur', commit);
         }
@@ -333,7 +360,10 @@ export class TableView {
                 options: this.options.getListOptions(column),
                 getColor: (entry) => this.options.getOptionColor(column, entry),
                 onColor: (entry, color) => this.options.onOptionColor(column, entry, color),
-                onChange: (next) => this.options.onListChange(item, column, next),
+                onChange: (next) => {
+                    this.options.onListChange(item, column, next);
+                    this.options.onCellSaved(item, column);
+                },
                 placeholder: t('tableOptionHint'),
                 createLabel: t('tableCreateOption'),
                 creatable: true,
@@ -359,11 +389,14 @@ export class TableView {
         cell.addEventListener('click', (event) => { event.stopPropagation(); onClick(event); });
     }
 
-    private pickStatus(event: MouseEvent, item: MediaItem): void {
+    private pickStatus(event: MouseEvent, item: MediaItem, column: TableColumnDef): void {
         const menu = new Menu();
         for (const option of this.options.statusOptions) {
             menu.addItem((menuItem) => menuItem.setTitle(option.label).setChecked(item.status === option.status)
-                .onClick(() => this.options.onUpdate(item, { status: option.status })));
+                .onClick(() => {
+                    this.options.onUpdate(item, { status: option.status });
+                    this.options.onCellSaved(item, column);
+                }));
         }
         menu.showAtMouseEvent(event);
     }
@@ -375,38 +408,56 @@ export class TableView {
         return steps;
     }
 
-    private pickRating(event: MouseEvent, item: MediaItem): void {
+    private pickRating(event: MouseEvent, item: MediaItem, column: TableColumnDef): void {
         const menu = new Menu();
         for (const value of this.ratingSteps()) {
             menu.addItem((menuItem) => menuItem.setTitle(`${value} \u2605`).setChecked(item.userRating === value)
-                .onClick(() => this.options.onUpdate(item, { userRating: value })));
+                .onClick(() => {
+                    this.options.onUpdate(item, { userRating: value });
+                    this.options.onCellSaved(item, column);
+                }));
         }
-        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => this.options.onUpdate(item, { userRating: null })));
+        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => {
+            this.options.onUpdate(item, { userRating: null });
+            this.options.onCellSaved(item, column);
+        }));
         menu.showAtMouseEvent(event);
     }
 
-    private pickPersonStatus(event: MouseEvent, item: MediaItem, name: string): void {
+    private pickPersonStatus(event: MouseEvent, item: MediaItem, name: string, column: TableColumnDef): void {
         if (!name) return;
         const current = findCompanion(item, name)?.status ?? null;
         const menu = new Menu();
         for (const status of COMPANION_STATUSES) {
             menu.addItem((menuItem) => menuItem.setTitle(this.options.companionLabels[status]).setChecked(current === status)
-                .onClick(() => this.options.onPerson(item, name, { status })));
+                .onClick(() => {
+                    this.options.onPerson(item, name, { status });
+                    this.options.onCellSaved(item, column);
+                }));
         }
-        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => this.options.onPerson(item, name, { status: null })));
+        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => {
+            this.options.onPerson(item, name, { status: null });
+            this.options.onCellSaved(item, column);
+        }));
         menu.showAtMouseEvent(event);
     }
 
-    private pickPersonRating(event: MouseEvent, item: MediaItem, name: string): void {
+    private pickPersonRating(event: MouseEvent, item: MediaItem, name: string, column: TableColumnDef): void {
         if (!name) return;
         const current = findCompanion(item, name)?.rating ?? null;
         const menu = new Menu();
         for (let step = 10; step >= 1; step--) {
             const value = step / 2;
             menu.addItem((menuItem) => menuItem.setTitle(`${value} \u2605`).setChecked(current === value)
-                .onClick(() => this.options.onPerson(item, name, { rating: value })));
+                .onClick(() => {
+                    this.options.onPerson(item, name, { rating: value });
+                    this.options.onCellSaved(item, column);
+                }));
         }
-        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => this.options.onPerson(item, name, { rating: null })));
+        menu.addItem((menuItem) => menuItem.setTitle(t('contextClear')).onClick(() => {
+            this.options.onPerson(item, name, { rating: null });
+            this.options.onCellSaved(item, column);
+        }));
         menu.showAtMouseEvent(event);
     }
 }

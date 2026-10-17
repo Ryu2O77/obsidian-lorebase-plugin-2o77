@@ -12986,6 +12986,19 @@ button.lorebase-steamgriddb-chevron.is-open {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lorebase-table-th-label { display: block; overflow: hidden; text-overflow: ellipsis; }
+.lorebase-table-th-sort {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+    background: transparent; border: none; padding: 0; margin: 0;
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.lorebase-table-th-sort:hover { color: var(--text-normal); }
+.lorebase-table-th-sort .lorebase-table-th-label { flex: 1 1 auto; }
+.lorebase-table-th-arrow { display: inline-flex; width: 12px; height: 12px; flex: 0 0 auto; opacity: 0.85; }
+.lorebase-table-th-arrow svg { width: 12px; height: 12px; }
+.lorebase-table-th-arrow.is-idle { opacity: 0; }
+.lorebase-table-th-sort:hover .lorebase-table-th-arrow.is-idle { opacity: 0.35; }
+.lorebase-table-th-sort.is-active { color: var(--lorebase-accent); }
+.lorebase-table-th-sort.is-active .lorebase-table-th-arrow { opacity: 1; }
 .lorebase-table-resize {
     position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
     cursor: col-resize; z-index: 3; touch-action: none;
@@ -13002,6 +13015,13 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-table-row { cursor: pointer; }
 .lorebase-table-row:hover .lorebase-table-cell { background: var(--background-modifier-hover); }
 .lorebase-table-row.is-selected .lorebase-table-cell { background: var(--background-modifier-active-hover); }
+
+/* Brief flash on a table cell right after an in-place edit is saved, so the change reads as confirmed. */
+.lorebase-table-cell.lorebase-cell-just-saved { animation: lorebase-cell-flash 900ms ease-out; }
+@keyframes lorebase-cell-flash {
+    0% { background-color: color-mix(in srgb, var(--interactive-accent) 32%, transparent); }
+    100% { background-color: transparent; }
+}
 
 .lorebase-table-group td {
     position: sticky; left: 0;

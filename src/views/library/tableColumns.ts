@@ -1,4 +1,4 @@
-import type { Companion, CompanionStatus, MediaItem, TableViewConfig } from '../../types';
+import type { Companion, CompanionStatus, MediaItem, SortField, TableViewConfig } from '../../types';
 import { COMPANION_STATUSES, personSlug } from '../../services/media/people';
 
 export type TableCellKind = 'name' | 'status' | 'rating' | 'text' | 'number' | 'date' | 'list' | 'boolean' | 'personStatus' | 'personRating';
@@ -15,6 +15,19 @@ export interface TableColumnDef {
 
 export const DEFAULT_TABLE_COLUMNS = ['b:name', 'b:status', 'b:rating', 'b:year', 'b:finished', 'b:tags'];
 export const MIN_COLUMN_WIDTH = 60;
+
+/** Built-in table columns that map directly onto an existing sort field, so their header can be made clickable. */
+const SORTABLE_COLUMNS: Partial<Record<string, SortField>> = {
+    'b:name': 'name',
+    'b:year': 'year',
+    'b:rating': 'rating',
+    'b:started': 'dateStarted',
+    'b:finished': 'dateFinished',
+};
+
+export function sortFieldForColumn(column: TableColumnDef): SortField | null {
+    return SORTABLE_COLUMNS[column.key] ?? null;
+}
 
 export interface TableLabels {
     name: string; status: string; rating: string; year: string; started: string; finished: string;

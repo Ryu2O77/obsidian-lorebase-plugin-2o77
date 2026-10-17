@@ -4,7 +4,7 @@
  */
 
 import { ItemView, Notice, WorkspaceLeaf, TFile, TAbstractFile } from 'obsidian';
-import { AnimeItem, CompanionStatus, HiddenCardParts, FieldDefinition, GameItem, LibraryViewState, MangaItem, MediaItem, MediaStatus, MediaType, FilterState, LorebaseSettings, LorebasePluginInterface, MovieItem, ReadingItem, SeriesItem, ViewMode, SortField } from '../types';
+import { AnimeItem, CompanionStatus, HiddenCardParts, FieldDefinition, GameItem, LibraryViewState, MangaItem, MediaItem, MediaStatus, MediaType, FilterState, LorebaseSettings, LorebasePluginInterface, MovieItem, ReadingItem, SeriesItem, ViewMode, SortField, SortOrder } from '../types';
 import { GameService } from '../services/GameService';
 import { AnimeService } from '../services/AnimeService';
 import { VideoService } from '../services/VideoService';
@@ -92,6 +92,8 @@ export class LibraryView extends ItemView {
     private libraryContentEl: HTMLElement | null = null;
     private gridEl: HTMLElement | null = null;
     private isDestroyed = false; // Track if view has been destroyed
+    /** The table cell that was just edited, so the next render can flash it; expires on its own. */
+    private lastTableEdit: { filePath: string; columnKey: string; expiresAt: number } | null = null;
 
     // State
     private games: MediaItem[] = [];
@@ -464,17 +466,19 @@ export class LibraryView extends ItemView {
     /**
      * Create the toolbar
      */
+    private applySortChange(field: SortField, order: SortOrder): void {
+        const activeSettings = this.getActiveSettings();
+        activeSettings.sortField = field;
+        activeSettings.sortOrder = order;
+        this.viewState.sort = { field, order };
+        activeSettings.viewState = cloneLibraryViewState(this.viewState);
+        void this.plugin.saveSettings();
+        this.applyFiltersAndSort({ scrollMode: 'top' });
+    }
+
     private createToolbar(container: HTMLElement): void {
         const callbacks: ToolbarCallbacks = {
-            onSortChange: (field, order) => {
-                const activeSettings = this.getActiveSettings();
-                activeSettings.sortField = field;
-                activeSettings.sortOrder = order;
-                this.viewState.sort = { field, order };
-                activeSettings.viewState = cloneLibraryViewState(this.viewState);
-                void this.plugin.saveSettings();
-                this.applyFiltersAndSort({ scrollMode: 'top' });
-            },
+            onSortChange: (field, order) => this.applySortChange(field, order),
             onFilterChange: (filter) => {
                 Object.assign(this.filter, filter);
                 this.applyFiltersAndSort({ scrollMode: 'top' });
@@ -943,6 +947,15 @@ export class LibraryView extends ItemView {
             onListChange: (item, column, values) => this.applyTableList(item, column, values),
             isTextEditable: (item, column) => this.isTableTextEditable(item, column),
             onTextChange: (item, column, value) => this.applyTableText(item, column, value),
+            onCellSaved: (item, column) => {
+                this.lastTableEdit = { filePath: item.filePath, columnKey: column.key, expiresAt: Date.now() + 1400 };
+            },
+            isJustSaved: (item, column) => Boolean(
+                this.lastTableEdit
+                && this.lastTableEdit.filePath === item.filePath
+                && this.lastTableEdit.columnKey === column.key
+                && Date.now() < this.lastTableEdit.expiresAt
+            ),
             onOpenColumns: () => {
                 const current = resolveTableColumns(this.getActiveSettings().table, available).map((column) => column.key);
                 new TableColumnsModal(this.app, available, this.getActiveSettings().table, current, (keys) => {
