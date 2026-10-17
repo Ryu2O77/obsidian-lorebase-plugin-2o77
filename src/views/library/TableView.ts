@@ -274,6 +274,8 @@ export class TableView {
                 attr: { type: 'button', 'aria-label': t('tableOpenCalendar') },
             });
             setIcon(trigger, 'calendar-days');
+            trigger.addEventListener('click', (event) => event.stopPropagation());
+            control.addEventListener('click', (event) => event.stopPropagation());
             input = control.createEl('input', { cls: 'lorebase-table-edit-input is-date', attr: { type: 'text' } });
 
             let currentIso = initialIso;
