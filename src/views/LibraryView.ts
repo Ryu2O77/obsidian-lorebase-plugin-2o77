@@ -344,13 +344,18 @@ export class LibraryView extends ItemView {
     private handleMetadataChange(file: TFile): void {
         // Don't process if view is destroyed
         if (this.isDestroyed) return;
-        this.invalidateActiveServiceCache();
 
         // Check if this file is in our games list (O(1) lookup)
         const existingIndex = this.gameIndex.get(file.path);
         const activeSettings = this.getActiveSettings();
         const isInLibraryFolder = file.path.startsWith(activeSettings.folderPath) && file.extension === 'md';
         const parsedItem = this.parseActiveItemFromCache(file);
+
+        if (parsedItem) {
+            this.syncActiveServiceCacheEntry(parsedItem);
+        } else {
+            this.invalidateActiveServiceCache();
+        }
 
         if (existingIndex !== undefined) {
             if (this.shouldSuppressOptimisticMetadataRender(file.path)) {
@@ -431,6 +436,20 @@ export class LibraryView extends ItemView {
         } else {
             this.gameService.invalidateCache();
         }
+    }
+
+    /**
+     * Keeps the active service's own cache entry in sync with an edited item instead of
+     * invalidating the whole cache, so derived lists (e.g. GameService.getSeriesList(), used for
+     * the Series autocomplete) stay current immediately after a save rather than going empty
+     * until the next full reload.
+     */
+    private syncActiveServiceCacheEntry(item: MediaItem): void {
+        if (this.mediaType === 'game' && item.type === 'game') {
+            this.gameService.syncCacheEntry(item);
+            return;
+        }
+        this.invalidateActiveServiceCache();
     }
 
     private parseActiveItemFromCache(file: TFile): MediaItem | null {

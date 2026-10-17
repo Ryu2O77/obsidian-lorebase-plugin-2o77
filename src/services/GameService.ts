@@ -50,6 +50,24 @@ export class GameService {
     }
 
     /**
+     * Patches a single entry in the in-memory cache instead of invalidating the whole thing.
+     * Editing one game (e.g. from the Edit modal) used to call invalidateCache(), which made
+     * getSeriesList() return an empty list until the next full loadGames() reload (view close/
+     * reopen) — so a series typed for one game would silently not show up as a suggestion while
+     * editing another game right after. Keeping the cache valid and just swapping the entry in
+     * place keeps derived lists like getSeriesList() immediately up to date.
+     */
+    syncCacheEntry(item: GameItem): void {
+        if (!this.cacheValid) return;
+        const index = this.cache.findIndex((g) => g.filePath === item.filePath);
+        if (index !== -1) {
+            this.cache[index] = item;
+        } else {
+            this.cache.push(item);
+        }
+    }
+
+    /**
      * Load all games - HIGHLY OPTIMIZED using metadataCache
      */
     async loadGames(): Promise<GameItem[]> {
