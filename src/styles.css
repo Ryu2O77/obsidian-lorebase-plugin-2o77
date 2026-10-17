@@ -13036,6 +13036,22 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-table-pill.is-status-paused, .lorebase-table-pill.is-status-on_hold { background: rgba(var(--color-orange-rgb, 210, 150, 60), 0.28); }
 .lorebase-table-pill.is-status-played { background: rgba(179, 136, 255, 0.28); }
 .lorebase-table-pill.is-status-sandbox { background: rgba(255, 235, 59, 0.25); }
+.lorebase-table-pill.is-status-not_started { background: rgba(160, 160, 160, 0.22); }
+
+/* Status filter chips (advanced filter builder) reuse the same per-status colors as the table pills above,
+   so the two stay in sync instead of drifting into separate palettes. */
+.lorebase-view-option-chip.is-status-completed { background: rgba(var(--color-green-rgb, 70, 160, 90), 0.28); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-playing, .lorebase-view-option-chip.is-status-watching, .lorebase-view-option-chip.is-status-reading { background: rgba(var(--color-blue-rgb, 70, 120, 200), 0.28); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-planned, .lorebase-view-option-chip.is-status-wishlist, .lorebase-view-option-chip.is-status-backlog { background: rgba(var(--color-purple-rgb, 140, 100, 200), 0.25); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-dropped { background: rgba(var(--color-red-rgb, 200, 70, 70), 0.28); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-paused, .lorebase-view-option-chip.is-status-on_hold { background: rgba(var(--color-orange-rgb, 210, 150, 60), 0.28); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-played { background: rgba(179, 136, 255, 0.28); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-sandbox { background: rgba(255, 235, 59, 0.25); color: var(--text-normal); }
+.lorebase-view-option-chip.is-status-not_started { background: rgba(160, 160, 160, 0.22); color: var(--text-normal); }
+.lorebase-view-option-chip[class*="is-status-"].is-active {
+    border-color: color-mix(in srgb, var(--lorebase-accent) 72%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lorebase-accent) 55%, transparent);
+}
 
 .lorebase-table-score { color: var(--color-yellow, #e0b43a); letter-spacing: 1px; }
 .lorebase-table-score.is-person { color: var(--color-orange, #d8944a); }

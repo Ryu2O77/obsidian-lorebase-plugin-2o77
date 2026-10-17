@@ -603,9 +603,11 @@ export class Toolbar {
         if (definition?.options?.length) {
             const chips = parent.createDiv({ cls: 'lorebase-view-option-chips' });
             const selected = new Set(Array.isArray(rule.value) ? rule.value.map(String) : []);
+            const isStatusField = definition.id === 'status';
             for (const option of definition.options) {
+                const statusCls = isStatusField ? `is-status-${option.value}` : '';
                 const chip = chips.createEl('button', {
-                    cls: `lorebase-view-option-chip ${selected.has(option.value) ? 'is-active' : ''}`,
+                    cls: `lorebase-view-option-chip ${statusCls} ${selected.has(option.value) ? 'is-active' : ''}`,
                     text: option.label,
                     attr: { type: 'button', 'aria-pressed': String(selected.has(option.value)) },
                 });
