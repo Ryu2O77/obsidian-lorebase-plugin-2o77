@@ -20,6 +20,7 @@ import { DeleteModal } from './modals/DeleteModal';
 import { SteamSyncReviewModal } from './modals/SteamSyncReviewModal';
 import { SteamSyncProgressModal } from './modals/SteamSyncProgressModal';
 import { NoteImportReviewModal } from './modals/NoteImportReviewModal';
+import { GoodreadsImportModal } from './modals/GoodreadsImportModal';
 import { GameService } from './services/GameService';
 import { AnimeService } from './services/AnimeService';
 import { VideoService } from './services/VideoService';
@@ -188,6 +189,13 @@ export default class LorebasePlugin extends Plugin {
             id: 'import-existing-notes',
             callback: () => {
                 void this.runNoteImport();
+            }
+        });
+
+        this.addLocalizedCommand('goodreadsImportCommand', {
+            id: 'import-goodreads-library',
+            callback: () => {
+                new GoodreadsImportModal(this.app, this.settings, () => this.refreshViews()).open();
             }
         });
 
