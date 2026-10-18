@@ -300,6 +300,8 @@ export class TableView {
             });
             setIcon(trigger, 'calendar-days');
             trigger.addEventListener('click', (event) => event.stopPropagation());
+            // Keep focus in the input when the icon is pressed: a blur here would tear the picker down before its click runs.
+            trigger.addEventListener('mousedown', (event) => event.preventDefault());
             control.addEventListener('click', (event) => event.stopPropagation());
             input = control.createEl('input', { cls: 'lorebase-table-edit-input is-date', attr: { type: 'text' } });
 
@@ -316,7 +318,15 @@ export class TableView {
                 }
             );
             datePicker.syncInput(initialIso);
-            input.addEventListener('blur', () => datePicker?.destroy());
+            // Leave the editor when pressing outside the cell and the calendar popover.
+            const onOutsidePress = (event: PointerEvent): void => {
+                if (!cell.isConnected) { document.removeEventListener('pointerdown', onOutsidePress, true); datePicker?.destroy(); return; }
+                const target = event.target as Node | null;
+                if (target && (cell.contains(target) || (target as HTMLElement).closest?.('.lorebase-date-picker-popover'))) return;
+                document.removeEventListener('pointerdown', onOutsidePress, true);
+                cancel();
+            };
+            window.setTimeout(() => document.addEventListener('pointerdown', onOutsidePress, true), 0);
         } else {
             const inputType = column.kind === 'number' ? 'number' : 'text';
             input = cell.createEl('input', {
