@@ -925,6 +925,8 @@ export class LibraryView extends ItemView {
             statusOptions: this.getStatusOptions(),
             companionLabels: getCompanionStatusLabels(this.mediaType),
             halfRatings: true,
+            currentSort: this.viewState.sort,
+            onSortChange: (field, order) => this.applySortChange(field, order),
             isSelected: (item) => this.selectedPaths.has(item.filePath),
             onOpen: (item) => { void this.handleCardClick(item); },
             onContextMenu: (item, x, y) => this.showContextMenu(item, x, y),
