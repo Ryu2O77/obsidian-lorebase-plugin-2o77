@@ -66,11 +66,12 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
     if (titleMeta) wrapTitle(titleMeta);
     const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
 
-    // Chapters / seasons / episodes on top, rating right after.
+    // Rating on top, chapters / seasons / episodes right after.
     if (status) center.prepend(status);
     const progress = center.querySelector<HTMLElement>('.lorebase-editmode-anime-parts, .lorebase-editmode-reading-progress');
     if (progress) {
-        center.prepend(progress);
+        if (status) status.after(progress);
+        else center.prepend(progress);
         // Season status goes above the seasons strip.
         const seasonStatus = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-part-status-field');
         const navigation = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-parts-navigation');

@@ -13597,10 +13597,10 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-title-meta > .lorebase-editmode-original-title.is-hidden,
 .lorebase-editmode-title-meta > .lorebase-editmode-original-title:empty { display: none; }
 
-/* Seasons / chapters always first, rating second */
+/* Rating always first, seasons / chapters second */
+.lorebase-editmode-column-center > .lorebase-editmode-status-rating { order: -2; }
 .lorebase-editmode-column-center > .lorebase-editmode-anime-parts,
-.lorebase-editmode-column-center > .lorebase-editmode-reading-progress { order: -2; }
-.lorebase-editmode-column-center > .lorebase-editmode-status-rating { order: -1; }
+.lorebase-editmode-column-center > .lorebase-editmode-reading-progress { order: -1; }
 
 .lorebase-editmode-switch-row.is-hidden { display: none; }
 
