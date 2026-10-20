@@ -1,4 +1,6 @@
+import { setIcon } from 'obsidian';
 import { Companion, CompanionStatus } from '../types';
+import { paintStars, starValueFromClick } from './halfStars';
 import { t } from '../localization';
 import { COMPANION_STATUSES, addNames, parseHalfRating, parseNameList } from '../services/media/people';
 
@@ -160,29 +162,67 @@ export class CompanionsEditor {
 
     private renderRow(entry: Companion): void {
         if (!this.rowsEl) return;
-        const row = this.rowsEl.createDiv({ cls: 'lorebase-companion-row' });
-        row.createSpan({ cls: 'lorebase-companion-row-name', text: entry.name });
+        const card = this.rowsEl.createDiv({ cls: 'lorebase-companion-card' });
 
-        const status = row.createEl('select', { cls: 'lorebase-editmode-input lorebase-companion-select' });
-        status.createEl('option', { text: '—', attr: { value: '' } });
+        const head = card.createDiv({ cls: 'lorebase-companion-card-head' });
+        head.createSpan({ cls: 'lorebase-companion-card-name', text: entry.name });
+        const clear = head.createEl('button', {
+            cls: 'lorebase-editmode-btn lorebase-editmode-btn-ghost lorebase-editmode-btn-tight',
+            text: t('editClear'),
+            attr: { type: 'button' },
+        });
+
+        const segments = card.createDiv({ cls: 'lorebase-editmode-segmented lorebase-companion-segments', attr: { role: 'tablist' } });
+        const icons: Record<CompanionStatus, string> = { planned: 'circle', watching: 'play', completed: 'check', dropped: 'x', paused: 'pause' };
+        const segmentButtons = new Map<CompanionStatus, HTMLButtonElement>();
         for (const value of COMPANION_STATUSES) {
-            status.createEl('option', { text: this.options.statusLabels[value], attr: { value } });
+            const button = segments.createEl('button', {
+                cls: 'lorebase-editmode-segment',
+                attr: { type: 'button', 'aria-pressed': 'false' },
+            });
+            setIcon(button.createSpan({ cls: 'lorebase-editmode-segment-icon', attr: { 'aria-hidden': 'true' } }), icons[value]);
+            button.createSpan({ cls: 'lorebase-editmode-segment-label', text: this.options.statusLabels[value] });
+            button.addEventListener('click', () => {
+                entry.status = entry.status === value ? null : value;
+                paintStatus();
+            });
+            segmentButtons.set(value, button);
         }
-        status.value = entry.status ?? '';
-        status.addEventListener('change', () => {
-            entry.status = (status.value || null) as CompanionStatus | null;
-        });
 
-        const rating = row.createEl('select', { cls: 'lorebase-editmode-input lorebase-companion-select' });
-        rating.createEl('option', { text: '—', attr: { value: '' } });
-        for (let step = 1; step <= 10; step++) {
-            const value = step / 2;
-            rating.createEl('option', { text: `${value} \u2605`, attr: { value: String(value) } });
+        const ratingBody = card.createDiv({ cls: 'lorebase-editmode-rating-body lorebase-companion-rating-body' });
+        const stars = ratingBody.createDiv({ cls: 'lorebase-editmode-stars' });
+        const valueEl = ratingBody.createSpan({ cls: 'lorebase-editmode-rating-value lorebase-companion-rating-value' });
+        for (let value = 1; value <= 5; value++) {
+            const star = stars.createEl('button', {
+                cls: 'lorebase-editmode-star',
+                text: String.fromCharCode(9733),
+                attr: { type: 'button', 'data-rating': String(value), 'aria-label': `${t('editRating')} ${value}` },
+            });
+            star.addEventListener('click', (event) => {
+                const picked = starValueFromClick(star, value, event);
+                entry.rating = entry.rating === picked ? null : picked;
+                paintRating();
+            });
         }
-        rating.value = entry.rating === null ? '' : String(entry.rating);
-        rating.addEventListener('change', () => {
-            entry.rating = parseHalfRating(rating.value);
+
+        const paintStatus = (): void => {
+            for (const [value, button] of segmentButtons) {
+                button.toggleClass('is-active', entry.status === value);
+                button.setAttr('aria-pressed', String(entry.status === value));
+            }
+        };
+        const paintRating = (): void => {
+            paintStars(stars, entry.rating);
+            valueEl.setText(`${(entry.rating ?? 0).toFixed(1)} / 5.0`);
+        };
+        clear.addEventListener('click', () => {
+            entry.status = null;
+            entry.rating = null;
+            paintStatus();
+            paintRating();
         });
+        paintStatus();
+        paintRating();
     }
 
     private renderFranchise(): void {

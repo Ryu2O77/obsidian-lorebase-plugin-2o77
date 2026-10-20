@@ -27,15 +27,23 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         poster.after(titleMeta);
         titleMeta.addClass('is-in-sidebar');
         if (notes) {
-            titleMeta.after(notes);
-            // The description is always visible: no disclosure button, no tabs, never collapsed.
-            notes.addClass('is-always-open');
+            // Description lives inside the identity panel as a plain text area (no title row, counter or "saved" label).
+            const shell = notes.querySelector<HTMLElement>('.lorebase-editmode-notes-shell');
+            const area = notes.querySelector<HTMLTextAreaElement>('textarea');
             titleMeta.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
-            notes.querySelector('.lorebase-editmode-note-tabs')?.remove();
-            notes.querySelector<HTMLTextAreaElement>('textarea')?.setAttribute('rows', '6');
+            if (shell && area) {
+                area.setAttribute('rows', '6');
+                area.placeholder = t('editDescription');
+                shell.addClass('lorebase-editmode-description-shell');
+                titleMeta.insertBefore(shell, titleMeta.querySelector('.lorebase-editmode-genres-field'));
+            }
+            notes.removeClass('is-always-open');
+            notes.setCssStyles({ display: 'none' });
         }
         // Genres and studio sit below the description.
         const extra = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-identity-extra' });
+        const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
+        if (studio) extra.appendChild(studio);
         const genres = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-genres-field');
         if (genres) {
             genres.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
@@ -43,9 +51,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
             wrap.createSpan({ cls: 'lorebase-editmode-field-label', text: t('genres') });
             wrap.appendChild(genres);
         }
-        const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
-        if (studio) extra.appendChild(studio);
-        if (extra.childElementCount > 0) (notes ?? titleMeta).after(extra);
+        if (extra.childElementCount > 0) titleMeta.after(extra);
     }
     mountMyNotes(center, options);
     // Chapters / seasons / episodes on top, rating right after.
@@ -58,6 +64,18 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         const seasonStatus = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-part-status-field');
         const navigation = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-parts-navigation');
         if (seasonStatus && navigation) navigation.before(seasonStatus);
+        // "Mark all watched" joins the add / remove icons.
+        const completeAll = progress.querySelector<HTMLButtonElement>('[data-action="complete-all-parts"]');
+        const actions = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-part-inline-actions');
+        if (completeAll && actions) {
+            const label = completeAll.textContent?.replace('\u2713', '').trim() ?? '';
+            completeAll.className = 'lorebase-editmode-anime-parts-icon-action';
+            completeAll.empty();
+            completeAll.setAttribute('aria-label', label);
+            completeAll.setAttribute('title', label);
+            setIcon(completeAll, 'check-check');
+            actions.prepend(completeAll);
+        }
     }
 
     // Community rating and metadata source on top of the right column.

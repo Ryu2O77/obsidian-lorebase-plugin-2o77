@@ -13510,3 +13510,29 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-identity-extra { display: flex; flex-direction: column; gap: 10px; }
 .lorebase-editmode-identity-extra .lorebase-editmode-genres-field { display: block; margin: 0; min-height: 0; }
 .lorebase-editmode-my-notes .lorebase-editmode-notes-input { width: 100%; resize: vertical; }
+
+/* Description inside the identity panel */
+.lorebase-editmode-title-meta > .lorebase-editmode-description-shell { grid-column: 1 / -1; }
+.lorebase-editmode-description-shell .lorebase-editmode-notes-input { width: 100%; min-height: 110px; resize: vertical; }
+
+/* "Status for" cards, styled like the personal rating */
+.lorebase-companion-people-block .lorebase-companion-rows { gap: 12px; }
+.lorebase-companion-card {
+    display: flex; flex-direction: column; gap: 10px;
+    border-radius: var(--radius-m);
+    border: 1px solid color-mix(in srgb, var(--background-modifier-border) 58%, transparent);
+    background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, #ffd98b 7%, transparent), transparent 60%),
+        color-mix(in srgb, var(--background-secondary) 52%, transparent);
+    padding: 12px 14px;
+}
+.lorebase-companion-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lorebase-companion-card-name { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.lorebase-companion-segments .lorebase-editmode-segment { flex: 1 1 90px; min-height: 30px; padding: 5px 8px; }
+.lorebase-companion-segments .lorebase-editmode-segment.is-active {
+    border-color: color-mix(in srgb, var(--interactive-accent) 60%, var(--background-modifier-border));
+    color: var(--text-normal);
+    background: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-secondary));
+}
+.lorebase-companion-card .lorebase-editmode-star { width: 32px; height: 32px; font-size: 1.05rem; border-radius: 9px; }
+.lorebase-companion-card .lorebase-editmode-stars { gap: 6px; }
+.lorebase-companion-rating-value { font-size: 1.25rem; }
