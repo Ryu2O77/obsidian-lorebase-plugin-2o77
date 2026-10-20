@@ -56,6 +56,14 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         if (extra.childElementCount > 0) titleMeta.after(extra);
     }
     mountMyNotes(center, options);
+    // Start/finish dates sit beside the personal rating.
+    const ratingWrap = status?.querySelector<HTMLElement>('.lorebase-editmode-rating-wrap');
+    const playDates = status?.querySelector<HTMLElement>('.lorebase-editmode-play-dates');
+    if (status && ratingWrap && playDates) {
+        ratingWrap.after(playDates);
+        status.addClass('has-side-dates');
+    }
+
     // Chapters / seasons / episodes on top, rating right after.
     const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
     if (status) center.prepend(status);

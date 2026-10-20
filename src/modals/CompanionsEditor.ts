@@ -85,7 +85,7 @@ export class CompanionsEditor {
                 ratingPanel.querySelector('.lorebase-companion-people-block')?.remove();
                 peopleHost = createDiv({ cls: 'lorebase-companion-people-block' });
                 const dates = ratingPanel.querySelector('.lorebase-editmode-play-dates');
-                if (dates) dates.before(peopleHost);
+                if (dates) dates.after(peopleHost);
                 else ratingPanel.appendChild(peopleHost);
                 this.host.addClass('is-people-moved');
             }
