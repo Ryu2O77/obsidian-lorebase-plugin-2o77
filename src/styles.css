@@ -13785,3 +13785,8 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-facts .lorebase-editmode-date-input-row { display: flex; gap: 6px; align-items: center; }
 .lorebase-editmode-facts .lorebase-editmode-date-input-row .lorebase-editmode-date-control { flex: 1 1 auto; min-width: 0; }
 .lorebase-editmode-heart-btn.is-overlay { width: 34px; height: 34px; }
+
+/* "Today" now lives inside the calendar popover */
+.lorebase-editmode-view .lorebase-editmode-date-input-row > .lorebase-editmode-btn-tiny { display: none; }
+.lorebase-date-picker-footer { justify-content: space-between; }
+.lorebase-date-picker-footer > .lorebase-date-picker-footer-button:last-child { order: -1; }

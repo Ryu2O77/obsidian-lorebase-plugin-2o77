@@ -230,6 +230,12 @@ export class HierarchicalDatePicker {
         });
         clear.disabled = !this.getValue();
         clear.addEventListener('click', () => this.selectValue(''));
+        const todayButton = footer.createEl('button', {
+            cls: 'lorebase-date-picker-footer-button',
+            attr: { type: 'button' },
+            text: t('editToday'),
+        });
+        todayButton.addEventListener('click', () => this.selectValue(toIsoDate(todayParts())));
 
         this.positionPopover();
     }
