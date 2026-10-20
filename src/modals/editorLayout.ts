@@ -262,7 +262,41 @@ function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
             set(next: string) { set.call(bridge, next); current = next; handle.load(next); },
         });
     }
-    center.appendChild(panel);
+    // Notes go right above Related media.
+    const related = center.querySelector('.lorebase-editmode-related');
+    if (related) related.before(panel);
+    else center.appendChild(panel);
+    collapseRelated(center);
+}
+
+/** Related media becomes a collapsible panel, closed whenever the editor opens. */
+function collapseRelated(center: HTMLElement): void {
+    const related = center.querySelector<HTMLElement>('.lorebase-editmode-related');
+    const titleRow = related?.querySelector<HTMLElement>('.lorebase-editmode-panel-title-row');
+    if (!related || !titleRow || related.hasClass('is-collapsible')) return;
+    related.addClass('is-collapsible', 'is-collapsed');
+    const heading = titleRow.querySelector<HTMLElement>('.lorebase-editmode-panel-title');
+    const caret = createSpan({ cls: 'lorebase-editmode-collapsible-caret lorebase-related-caret', attr: { 'aria-hidden': 'true' } });
+    setIcon(caret, 'chevron-down');
+    heading?.after(caret);
+    titleRow.addClass('lorebase-related-head');
+    titleRow.setAttribute('role', 'button');
+    titleRow.setAttribute('tabindex', '0');
+    titleRow.setAttribute('aria-expanded', 'false');
+    const toggle = (): void => {
+        const collapsed = related.hasClass('is-collapsed');
+        related.toggleClass('is-collapsed', !collapsed);
+        titleRow.setAttribute('aria-expanded', String(collapsed));
+    };
+    titleRow.addEventListener('click', (event) => {
+        if ((event.target as HTMLElement).closest('button')) return;
+        toggle();
+    });
+    titleRow.addEventListener('keydown', (event) => {
+        if (event.target !== titleRow || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        toggle();
+    });
 }
 
 /**

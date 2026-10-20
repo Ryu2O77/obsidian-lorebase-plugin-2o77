@@ -13842,3 +13842,10 @@ button.lorebase-steamgriddb-chevron.is-open {
     line-height: 1.5; font-size: 0.86rem; transition: filter .2s;
 }
 .lorebase-ep-note.is-spoiler:not(:hover):not(:focus-within) textarea.lorebase-ep-note-body { filter: blur(6px); }
+
+/* Related media: collapsed by default */
+.lorebase-related-head { cursor: pointer; justify-content: flex-start; gap: 8px; }
+.lorebase-related-head > button { margin-left: auto; }
+.lorebase-related-caret { transition: transform .15s; display: inline-flex; color: var(--text-muted); }
+.lorebase-editmode-related:not(.is-collapsed) .lorebase-related-caret { transform: rotate(180deg); }
+.lorebase-editmode-related.is-collapsed > :not(.lorebase-editmode-panel-title-row) { display: none; }
