@@ -16,6 +16,7 @@ export interface MediaContextMenuDeps {
     getStatusOptions: () => Array<{ status: MediaStatus; label: string }>;
     onApplyFiltersAndSort: () => void;
     onEdit: (item: MediaItem) => void;
+    onEditBeta?: (item: MediaItem) => void;
     onOpen: (item: MediaItem) => void;
     onDelete: (item: MediaItem) => void;
     onSourceAction?: (item: MediaItem, relink: boolean) => void;
@@ -342,6 +343,17 @@ export function showMediaContextMenu(item: MediaItem, x: number, y: number, deps
                 else deps.onEdit(item);
             });
     });
+
+    if (deps.onEditBeta) {
+        menu.addItem((menuItem) => {
+            menuItem.setTitle(t('contextEditBeta'))
+                .setIcon('flask-conical')
+                .onClick(() => {
+                    if (deps.isDestroyed()) return;
+                    deps.onEditBeta?.(item);
+                });
+        });
+    }
 
     if (deps.onHide) {
         const hidden = item.rawFields?.lorebase_hidden === true;

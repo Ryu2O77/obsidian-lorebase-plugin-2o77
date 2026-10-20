@@ -13601,3 +13601,36 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-column-center > .lorebase-editmode-anime-parts,
 .lorebase-editmode-column-center > .lorebase-editmode-reading-progress { order: -2; }
 .lorebase-editmode-column-center > .lorebase-editmode-status-rating { order: -1; }
+
+.lorebase-editmode-switch-row.is-hidden { display: none; }
+
+/* ---- Beta layout: poster rail + identity header + tabs ---- */
+.lorebase-editmode-grid.is-beta { grid-template-columns: 300px minmax(0, 1fr); }
+.lorebase-editmode-grid.is-beta > .lorebase-editmode-column-right.is-empty-rail { display: none; }
+.lorebase-editmode-grid.is-beta > .lorebase-editmode-column-left { position: relative; }
+.lorebase-editmode-grid.is-beta .lorebase-editmode-title-meta {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--interactive-accent) 8%, transparent), transparent 70%), color-mix(in srgb, var(--background-primary) 90%, transparent);
+    padding: 16px 18px;
+}
+.lorebase-editmode-grid.is-beta .lorebase-editmode-title-meta .lorebase-editmode-title-input { font-size: 1.7rem; font-weight: 700; }
+.lorebase-editmode-grid.is-beta .lorebase-editmode-title-meta .lorebase-editmode-meta-row .lorebase-editmode-field { width: 120px; }
+.lorebase-beta-tabs {
+    display: flex; gap: 6px; padding: 4px; border-radius: var(--radius-l);
+    background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+    border: 1px solid var(--lb-edit-border-soft);
+    position: sticky; top: 0; z-index: 3; backdrop-filter: blur(6px);
+}
+.lorebase-beta-tab {
+    flex: 1 1 0; border: 1px solid transparent; border-radius: var(--radius-m); padding: 8px 12px;
+    background: transparent; color: var(--text-muted); font-weight: 600; font-size: 0.82rem; letter-spacing: 0.03em; cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.lorebase-beta-tab:hover { color: var(--text-normal); background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent); }
+.lorebase-beta-tab.is-active {
+    color: var(--lorebase-accent, var(--interactive-accent));
+    border-color: color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 55%, transparent);
+    background: color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 12%, transparent);
+}
+.lorebase-beta-panes { display: flex; flex-direction: column; }
+.lorebase-beta-pane { display: none; flex-direction: column; gap: 10px; }
+.lorebase-beta-pane.is-active { display: flex; }

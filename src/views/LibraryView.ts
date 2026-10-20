@@ -1896,7 +1896,7 @@ export class LibraryView extends ItemView {
         await this.openGame(game);
     }
 
-    private openEditModal(item: MediaItem): void {
+    private openEditModal(item: MediaItem, beta = false): void {
         const scrollTop = this.contentEl.scrollTop;
         this.plugin.showEditModal(
             item,
@@ -1905,7 +1905,8 @@ export class LibraryView extends ItemView {
                 window.setTimeout(() => this.refreshFileFromCache(item.filePath), 100);
                 this.finishEditScrollRestore(item.filePath);
             },
-            () => this.beginEditScrollRestore(item.filePath, scrollTop)
+            () => this.beginEditScrollRestore(item.filePath, scrollTop),
+            beta
         );
     }
 
@@ -1924,6 +1925,9 @@ export class LibraryView extends ItemView {
             onItemMutated: (item, changedFields) => this.handleContextItemMutation(item, changedFields),
             onEdit: (item) => {
                 this.openEditModal(item);
+            },
+            onEditBeta: (item) => {
+                this.openEditModal(item, true);
             },
             onOpen: (item) => {
                 void this.openGame(item);

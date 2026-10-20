@@ -892,7 +892,7 @@ export interface LorebasePluginInterface {
     settings: LorebaseSettings;
     app: App;
     saveSettings(): Promise<void>;
-    showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void): void;
+    showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void, beta?: boolean): void;
     showStatsModal(stats: GameStats | AnimeStats, mediaType: MediaType, items?: MediaItem[]): void;
     showDeleteModal(game: MediaItem, onConfirm: () => Promise<void>): void;
     addMediaItem(mediaType: MediaType): void;

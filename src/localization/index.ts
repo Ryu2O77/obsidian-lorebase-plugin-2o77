@@ -153,7 +153,7 @@ export type TranslationKey =
     | 'randomGame' | 'noGamesFound' | 'noAnimeFound' | 'noMoviesFound' | 'noSeriesFound' | 'noBooksFound' | 'noMangaFound'
     // Context menu
     | 'contextChangeStatus' | 'contextChangeRating' | 'contextAddFavorite'
-    | 'contextRemoveFavorite' | 'contextEdit' | 'contextDelete' | 'contextClear'
+    | 'contextRemoveFavorite' | 'contextEdit' | 'contextEditBeta' | 'contextDelete' | 'contextClear'
     | 'contextSourceLink' | 'contextSourceRefresh' | 'contextSourceChange'
     | 'contextEpisodePlusOne' | 'contextPagePlusOne' | 'contextChapterPlusOne'
     | 'contextGames' | 'contextAnime'
@@ -682,6 +682,7 @@ const EN: Record<TranslationKey, string> = {
     contextPagePlusOne: 'Add +1 page',
     contextChapterPlusOne: 'Add +1 chapter',
     contextEdit: 'Edit',
+    contextEditBeta: 'Edit (beta layout)',
     contextSourceLink: 'Link source and autofill',
     contextSourceRefresh: 'Update from source',
     contextSourceChange: 'Change source',
@@ -1509,6 +1510,7 @@ const RU: Record<TranslationKey, string> = {
     contextPagePlusOne: 'Добавить +1 страницу',
     contextChapterPlusOne: 'Добавить +1 главу',
     contextEdit: 'Редактировать',
+    contextEditBeta: 'Редактировать (бета-макет)',
     contextSourceLink: 'Связать источник и заполнить',
     contextSourceRefresh: 'Обновить из источника',
     contextSourceChange: 'Сменить источник',
@@ -2336,6 +2338,7 @@ const UK: Record<TranslationKey, string> = {
     contextPagePlusOne: 'Додати +1 сторінку',
     contextChapterPlusOne: 'Додати +1 розділ',
     contextEdit: 'Редагувати',
+    contextEditBeta: 'Редагувати (бета-макет)',
     contextSourceLink: 'Прив’язати джерело й заповнити',
     contextSourceRefresh: 'Оновити з джерела',
     contextSourceChange: 'Змінити джерело',

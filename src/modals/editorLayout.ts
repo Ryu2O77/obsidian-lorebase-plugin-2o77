@@ -1,6 +1,12 @@
 import { Platform, setIcon } from 'obsidian';
 import { t } from '../localization';
 
+let betaRequested = false;
+/** Marks the next editor that opens as the beta layout (consumed when the layout is arranged). */
+export function requestBetaEditor(value: boolean): void {
+    betaRequested = value;
+}
+
 export interface EditorLayoutOptions {
     /** Current "my notes" text and a setter, so the notes get their own box instead of a tab */
     getMyNotes?: () => string;
@@ -101,6 +107,10 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
 
     collapseTags(right);
     heartifyFavorite(root);
+    if (betaRequested) {
+        betaRequested = false;
+        applyBetaLayout(root, left, center, right);
+    }
 }
 
 function collapseTags(right: HTMLElement): void {
@@ -123,23 +133,101 @@ function collapseTags(right: HTMLElement): void {
 }
 
 function heartifyFavorite(root: HTMLElement): void {
-    const button = root.querySelector<HTMLButtonElement>('[data-toggle="favorite"]');
-    if (!button) return;
-    const row = button.closest<HTMLElement>('.lorebase-editmode-switch-row');
-    const panel = button.closest<HTMLElement>('.lorebase-editmode-quick-settings');
-    button.removeClass('lorebase-editmode-switch');
-    button.removeClass('lorebase-editmode-switch-favorite');
-    button.addClass('lorebase-editmode-heart-btn');
-    button.empty();
-    setIcon(button, 'heart');
-    // Always visible, under the poster, so the quick-settings row is no longer needed.
+    const original = root.querySelector<HTMLButtonElement>('[data-toggle="favorite"]');
+    if (!original) return;
+    const row = original.closest<HTMLElement>('.lorebase-editmode-switch-row');
+    const panel = original.closest<HTMLElement>('.lorebase-editmode-quick-settings');
     const posterCard = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card');
     if (!posterCard) return;
-    const favoriteRow = posterCard.createDiv({ cls: 'lorebase-poster-favorite-row' });
-    button.addClass('is-under-poster');
-    favoriteRow.appendChild(button);
-    row?.remove();
-    if (panel && !panel.querySelector('.lorebase-editmode-switch-row')) panel.addClass('is-hidden');
+
+    // The original switch stays in the DOM (hidden) as the source of truth; the heart mirrors and forwards clicks.
+    const heart = createEl('button', {
+        cls: 'lorebase-editmode-heart-btn is-under-poster',
+        attr: { type: 'button', 'aria-label': original.getAttribute('aria-label') ?? '', title: original.getAttribute('aria-label') ?? '' },
+    });
+    setIcon(heart, 'heart');
+    const sync = (): void => {
+        const active = original.classList.contains('is-active') || original.getAttribute('aria-pressed') === 'true';
+        heart.toggleClass('is-active', active);
+        heart.setAttribute('aria-pressed', String(active));
+    };
+    heart.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        original.click();
+        sync();
+    });
+    new MutationObserver(sync).observe(original, { attributes: true, attributeFilter: ['class', 'aria-pressed'] });
+    sync();
+    posterCard.createDiv({ cls: 'lorebase-poster-favorite-row' }).appendChild(heart);
+
+    row?.addClass('is-hidden');
+    if (panel && !panel.querySelector('.lorebase-editmode-switch-row:not(.is-hidden)')) panel.addClass('is-hidden');
+}
+
+/**
+ * Beta layout: poster rail on the left; on the right the identity header followed by tabs
+ * (Tracking / Advanced / Related) holding the same panels, so nothing is lost or re-bound.
+ */
+function applyBetaLayout(root: HTMLElement, left: HTMLElement, center: HTMLElement, right: HTMLElement): void {
+    const grid = root.querySelector<HTMLElement>('.lorebase-editmode-grid');
+    if (!grid) return;
+    grid.addClass('is-beta');
+    root.querySelector('.lorebase-editmode-breadcrumb')?.appendText(' · beta');
+
+    const titleMeta = left.querySelector<HTMLElement>('.lorebase-editmode-title-meta');
+    if (titleMeta) {
+        titleMeta.removeClass('is-in-sidebar');
+        center.prepend(titleMeta);
+    }
+
+    const pick = (container: HTMLElement, selectors: string[]): HTMLElement[] =>
+        selectors.map((selector) => container.querySelector<HTMLElement>(selector)).filter((el): el is HTMLElement => !!el);
+    const find = (selectors: string[]): HTMLElement[] =>
+        selectors.flatMap((selector) => {
+            const el = root.querySelector<HTMLElement>(selector);
+            return el ? [el] : [];
+        });
+
+    const panes: Array<{ label: string; panels: HTMLElement[] }> = [
+        {
+            label: t('editTracking'),
+            panels: find(['.lorebase-editmode-anime-parts', '.lorebase-editmode-reading-progress', '.lorebase-editmode-progress', '.lorebase-editmode-status-rating']),
+        },
+        {
+            label: t('editAdvanced'),
+            panels: find(['.lorebase-editmode-advanced:not(.lorebase-editmode-tags)', '.lorebase-editmode-tags', '.lorebase-editmode-companions', '.lorebase-editmode-my-notes']),
+        },
+        {
+            label: t('editRelatedMedia'),
+            panels: find(['.lorebase-editmode-related', '.lorebase-editmode-community-rating', '.lorebase-source-panel', '.lorebase-editmode-timestamps']),
+        },
+    ];
+    void pick;
+
+    const tabBar = createDiv({ cls: 'lorebase-beta-tabs', attr: { role: 'tablist' } });
+    const stack = createDiv({ cls: 'lorebase-beta-panes' });
+    const buttons: HTMLButtonElement[] = [];
+    const paneEls: HTMLElement[] = [];
+    panes.forEach((pane, index) => {
+        const button = tabBar.createEl('button', { cls: 'lorebase-beta-tab', text: pane.label, attr: { type: 'button', role: 'tab' } });
+        const el = stack.createDiv({ cls: 'lorebase-beta-pane' });
+        for (const panel of pane.panels) el.appendChild(panel);
+        buttons.push(button);
+        paneEls.push(el);
+        button.addEventListener('click', () => select(index));
+    });
+    const select = (active: number): void => {
+        buttons.forEach((button, i) => {
+            button.toggleClass('is-active', i === active);
+            button.setAttribute('aria-selected', String(i === active));
+        });
+        paneEls.forEach((el, i) => el.toggleClass('is-active', i === active));
+    };
+    select(0);
+    center.appendChild(tabBar);
+    center.appendChild(stack);
+    right.addClass('is-empty-rail');
 }
 
 /** "My notes" as its own panel in the centre column, instead of a tab on the description. */

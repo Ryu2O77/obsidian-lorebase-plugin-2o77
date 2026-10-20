@@ -3,6 +3,7 @@
  * v3.0.1
  */
 
+import { requestBetaEditor } from './modals/editorLayout';
 import { parseNameList } from './services/media/people';
 import { configureHiddenFiles } from './services/media/hiddenFiles';
 import { Plugin, WorkspaceLeaf, Menu, Notice, addIcon, TFile, type Command } from 'obsidian';
@@ -904,7 +905,16 @@ export default class LorebasePlugin extends Plugin {
     /**
      * Show edit modal for a media item
      */
-    showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void): void {
+    showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void, beta = false): void {
+        requestBetaEditor(beta);
+        try {
+            this.openEditModalInternal(item, onSave, onBeforeSave);
+        } finally {
+            requestBetaEditor(false);
+        }
+    }
+
+    private openEditModalInternal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void): void {
         if (item.type === 'anime') {
             const animeItem = item;
             const modal: AnimeEditModal = new AnimeEditModal(
