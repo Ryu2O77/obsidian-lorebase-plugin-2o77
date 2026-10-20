@@ -98,6 +98,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
 
     collapseTags(right);
     heartifyFavorite(root);
+    moveTitleUnderPoster(root);
     moveDatesUnderPoster(root);
     bindRatingPreview(root);
     if (options.beta) {
@@ -330,4 +331,14 @@ function bindRatingPreview(root: HTMLElement): void {
     }, restore);
     // A click changes the real value: forget the old snapshot so leaving the row does not undo it.
     stars.addEventListener('click', () => { snapshot = null; });
+}
+
+/** The title sits centred right below the poster, in the poster's own card. */
+function moveTitleUnderPoster(root: HTMLElement): void {
+    const frame = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card .lorebase-editmode-poster-frame');
+    const titleRow = root.querySelector<HTMLElement>('.lorebase-editmode-title-meta .lorebase-editmode-title-row');
+    if (frame && titleRow) {
+        titleRow.addClass('is-under-poster');
+        frame.after(titleRow);
+    }
 }

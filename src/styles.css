@@ -13665,3 +13665,15 @@ button.lorebase-steamgriddb-chevron.is-open {
 /* "+" chip to add a person */
 .lorebase-companion-add { min-width: 30px; font-weight: 700; }
 .lorebase-companion-add-input { width: 150px; padding: 3px 8px; }
+
+/* Centred title right under the poster */
+.lorebase-editmode-poster-card > .lorebase-editmode-title-row.is-under-poster { margin-top: 10px; display: block; }
+.lorebase-editmode-view .lorebase-editmode-poster-card .lorebase-editmode-title-input {
+    width: 100%; text-align: center; font-size: 1.2rem; font-weight: 700; line-height: 1.3;
+    background: transparent; border-color: transparent; box-shadow: none; padding: 4px 6px;
+}
+.lorebase-editmode-view .lorebase-editmode-poster-card .lorebase-editmode-title-input:hover,
+.lorebase-editmode-view .lorebase-editmode-poster-card .lorebase-editmode-title-input:focus {
+    background: var(--background-modifier-form-field); border-color: var(--background-modifier-border);
+}
+.lorebase-editmode-poster-card .lorebase-editmode-title-input.is-hidden { display: none; }
