@@ -1,6 +1,6 @@
 import { setIcon } from 'obsidian';
 import { Companion, CompanionStatus } from '../types';
-import { paintStars, starValueFromClick } from './halfStars';
+import { bindStarHover, paintStars, starValueFromClick } from './halfStars';
 import { t } from '../localization';
 import { COMPANION_STATUSES, addNames, parseHalfRating, parseNameList } from '../services/media/people';
 
@@ -218,6 +218,10 @@ export class CompanionsEditor {
             paintStars(stars, entry.rating);
             valueEl.setText(`${(entry.rating ?? 0).toFixed(1)} / 5.0`);
         };
+        bindStarHover(stars, (value) => {
+            paintStars(stars, value);
+            valueEl.setText(`${value.toFixed(1)} / 5.0`);
+        }, paintRating);
         clear.addEventListener('click', () => {
             entry.status = null;
             entry.rating = null;

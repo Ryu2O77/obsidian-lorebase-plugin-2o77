@@ -13,3 +13,18 @@ export function paintStars(root: HTMLElement, rating: number | null): void {
         button.toggleClass('is-half', rating !== null && value - 0.5 === rating);
     });
 }
+
+/**
+ * Hover preview for a row of star buttons: `onPreview` gets the half-star value under the pointer,
+ * `onLeave` is called when the pointer leaves the row so the caller can repaint the real value.
+ */
+export function bindStarHover(container: HTMLElement, onPreview: (value: number) => void, onLeave: () => void): void {
+    container.addEventListener('mousemove', (event) => {
+        const button = (event.target as HTMLElement | null)?.closest<HTMLElement>('.lorebase-editmode-star');
+        if (!button || !container.contains(button)) return;
+        const value = Number(button.dataset.rating ?? '0');
+        if (!value) return;
+        onPreview(starValueFromClick(button, value, event));
+    });
+    container.addEventListener('mouseleave', onLeave);
+}

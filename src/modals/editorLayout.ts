@@ -1,5 +1,6 @@
 import { Platform, setIcon } from 'obsidian';
 import { t } from '../localization';
+import { bindStarHover, paintStars } from './halfStars';
 
 export interface EditorLayoutOptions {
     /** Use the beta layout (poster rail + header + tabs) */
@@ -65,14 +66,6 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
     if (titleMeta) wrapTitle(titleMeta);
     const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
 
-    // Start/finish dates sit beside the personal rating.
-    const ratingWrap = status?.querySelector<HTMLElement>('.lorebase-editmode-rating-wrap');
-    const playDates = status?.querySelector<HTMLElement>('.lorebase-editmode-play-dates');
-    if (status && ratingWrap && playDates) {
-        ratingWrap.after(playDates);
-        status.addClass('has-side-dates');
-    }
-
     // Chapters / seasons / episodes on top, rating right after.
     if (status) center.prepend(status);
     const progress = center.querySelector<HTMLElement>('.lorebase-editmode-anime-parts, .lorebase-editmode-reading-progress');
@@ -104,6 +97,8 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
 
     collapseTags(right);
     heartifyFavorite(root);
+    moveDatesUnderPoster(root);
+    bindRatingPreview(root);
     if (options.beta) {
         applyBetaLayout(root, left, center, right);
     }
@@ -294,4 +289,40 @@ function growWithContent(area: HTMLTextAreaElement): void {
     }
     window.requestAnimationFrame(resize);
     window.setTimeout(resize, 200);
+}
+
+/** Start / finish dates live under the poster, where there is room, instead of a mostly empty column. */
+function moveDatesUnderPoster(root: HTMLElement): void {
+    const card = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card');
+    const dates = root.querySelector<HTMLElement>('.lorebase-editmode-status-rating .lorebase-editmode-play-dates');
+    if (card && dates) card.appendChild(dates);
+}
+
+/** Hovering the personal rating stars previews the value (and half stars) before clicking. */
+function bindRatingPreview(root: HTMLElement): void {
+    const stars = root.querySelector<HTMLElement>('.lorebase-editmode-status-rating [data-role="stars"]');
+    const valueEl = root.querySelector<HTMLElement>('.lorebase-editmode-status-rating [data-role="rating-value"]');
+    if (!stars || !valueEl) return;
+    let snapshot: { classes: string[]; text: string } | null = null;
+    const take = (): void => {
+        snapshot = {
+            classes: Array.from(stars.querySelectorAll<HTMLElement>('.lorebase-editmode-star')).map((star) => star.className),
+            text: valueEl.textContent ?? '',
+        };
+    };
+    const restore = (): void => {
+        if (!snapshot) return;
+        stars.querySelectorAll<HTMLElement>('.lorebase-editmode-star').forEach((star, index) => {
+            star.className = snapshot?.classes[index] ?? star.className;
+        });
+        valueEl.setText(snapshot.text);
+        snapshot = null;
+    };
+    bindStarHover(stars, (value) => {
+        if (!snapshot) take();
+        paintStars(stars, value);
+        valueEl.setText(`${value.toFixed(1)} / 5.0`);
+    }, restore);
+    // A click changes the real value: forget the old snapshot so leaving the row does not undo it.
+    stars.addEventListener('click', () => { snapshot = null; });
 }

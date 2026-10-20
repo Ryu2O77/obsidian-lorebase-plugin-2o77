@@ -13643,3 +13643,9 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-rating-wrap .lorebase-companion-card {
     background: color-mix(in srgb, var(--background-primary) 40%, transparent);
 }
+
+/* Dates under the poster */
+.lorebase-editmode-poster-card > .lorebase-editmode-play-dates {
+    display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; padding: 10px 0 0;
+    border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 58%, transparent);
+}
