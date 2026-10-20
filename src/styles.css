@@ -13503,3 +13503,6 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-poster-overlay-btn.is-active { border-color: var(--lorebase-accent, var(--interactive-accent)); color: var(--lorebase-accent, var(--interactive-accent)); }
 .lorebase-editmode-heart-btn.is-overlay { position: absolute; top: 8px; right: 8px; z-index: 2; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(4px); color: #ddd; }
 .lorebase-editmode-quick-settings.is-hidden { display: none; }
+
+.lorebase-editmode-notes.is-always-open.is-collapsed { display: block; }
+.lorebase-editmode-title-meta > .lorebase-editmode-studio-field { grid-column: 1 / -1; margin: 0; }

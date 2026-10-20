@@ -19,12 +19,26 @@ export function arrangeEditorLayout(root: HTMLElement): void {
     if (poster && titleMeta) {
         poster.after(titleMeta);
         titleMeta.addClass('is-in-sidebar');
-        if (notes) titleMeta.after(notes);
+        if (notes) {
+            titleMeta.after(notes);
+            // The description is always visible: no disclosure button, never collapsed.
+            notes.addClass('is-always-open');
+            titleMeta.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
+            notes.querySelector<HTMLTextAreaElement>('textarea')?.setAttribute('rows', '6');
+        }
+        // Studio (anime) sits with the identity info instead of inside Advanced.
+        const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
+        if (studio) {
+            studio.addClass('lorebase-editmode-studio-field');
+            titleMeta.appendChild(studio);
+        }
     }
 
-    // Rating first in the centre; progress / seasons / chapters follow.
+    // Chapters / seasons / episodes on top, rating right after.
     const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
     if (status) center.prepend(status);
+    const progress = center.querySelector<HTMLElement>('.lorebase-editmode-anime-parts, .lorebase-editmode-reading-progress');
+    if (progress) center.prepend(progress);
 
     // Community rating and metadata source on top of the right column.
     const source = right.querySelector<HTMLElement>('.lorebase-source-panel');
