@@ -36,6 +36,10 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
                 area.placeholder = t('editDescription');
                 shell.addClass('lorebase-editmode-description-shell');
                 titleMeta.insertBefore(shell, titleMeta.querySelector('.lorebase-editmode-genres-field'));
+                // Original title goes right below the description.
+                const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
+                if (original) shell.after(original);
+                growWithContent(area);
             }
             notes.removeClass('is-always-open');
             notes.setCssStyles({ display: 'none' });
@@ -147,9 +151,7 @@ function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
     const area = panel.createEl('textarea', { cls: 'lorebase-editmode-notes-input', attr: { 'data-field': 'my-notes', rows: '5' } });
     area.value = options.getMyNotes?.() ?? '';
     area.addEventListener('input', () => options.setMyNotes?.(area.value));
-    const related = center.querySelector('.lorebase-editmode-related');
-    if (related) related.before(panel);
-    else center.appendChild(panel);
+    center.appendChild(panel);
 }
 
 /**
@@ -188,4 +190,24 @@ function wrapTitle(titleMeta: HTMLElement): void {
     input.addClass('is-hidden');
     window.requestAnimationFrame(resize);
     window.setTimeout(resize, 150);
+}
+
+/** Makes a text area as tall as its text, so it reads like plain text instead of a scrolling box. */
+function growWithContent(area: HTMLTextAreaElement): void {
+    const resize = (): void => {
+        area.setCssStyles({ height: 'auto' });
+        area.setCssStyles({ height: `${area.scrollHeight}px` });
+    };
+    area.addEventListener('input', resize);
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if (descriptor?.get && descriptor.set) {
+        const { get, set } = descriptor;
+        Object.defineProperty(area, 'value', {
+            configurable: true,
+            get() { return get.call(area) as string; },
+            set(next: string) { set.call(area, next); window.requestAnimationFrame(resize); },
+        });
+    }
+    window.requestAnimationFrame(resize);
+    window.setTimeout(resize, 200);
 }
