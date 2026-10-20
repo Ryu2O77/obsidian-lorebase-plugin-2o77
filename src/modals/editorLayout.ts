@@ -40,8 +40,6 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
                 shell.addClass('lorebase-editmode-description-shell');
                 titleMeta.appendChild(shell);
                 // Original title goes right below the description.
-                const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
-                if (original) shell.after(original);
                 clampDescription(shell, area);
             }
             notes.removeClass('is-always-open');
@@ -52,6 +50,9 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         const facts = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-facts' });
         const metaRow = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-meta-row');
         if (metaRow) facts.appendChild(metaRow);
+        // Original title goes right under the year.
+        const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
+        if (original) facts.appendChild(original);
         const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"]')?.closest<HTMLElement>('.lorebase-editmode-field');
         if (creator) facts.appendChild(creator);
         const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
@@ -434,7 +435,10 @@ function clampDescription(shell: HTMLElement, area: HTMLTextAreaElement): void {
         const focused = activeDocument.activeElement === area;
         shell.toggleClass('is-clamped', overflowing && !expanded && !focused);
         toggle.toggleClass('is-hidden', !overflowing);
-        toggle.setText(expanded ? t('editShowLess') : t('editShowMore'));
+        toggle.empty();
+        setIcon(toggle, expanded ? 'chevron-up' : 'chevron-down');
+        toggle.setAttribute('aria-label', expanded ? t('editShowLess') : t('editShowMore'));
+        toggle.setAttribute('title', expanded ? t('editShowLess') : t('editShowMore'));
     };
     toggle.addEventListener('click', () => { expanded = !expanded; apply(); });
     area.addEventListener('focus', () => shell.removeClass('is-clamped'));
