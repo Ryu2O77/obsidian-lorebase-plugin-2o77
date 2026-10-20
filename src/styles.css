@@ -13426,3 +13426,29 @@ button.lorebase-steamgriddb-chevron.is-open {
     .lorebase-sd-columns { grid-template-columns: 1fr; }
     .lorebase-sd-bar-row { grid-template-columns: 96px minmax(0, 1fr) 28px 46px; }
 }
+
+/* Compact identity panel: title on top, year + genres + description toggle share one row */
+.lorebase-editmode-title-meta {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 6px;
+    align-items: end;
+}
+.lorebase-editmode-title-meta > .lorebase-editmode-title-row,
+.lorebase-editmode-title-meta > .lorebase-editmode-original-title { grid-column: 1 / -1; }
+.lorebase-editmode-title-meta > .lorebase-editmode-original-title { margin: -2px 0 2px; }
+.lorebase-editmode-title-meta > .lorebase-editmode-meta-row { grid-column: 1; margin: 0; }
+.lorebase-editmode-title-meta .lorebase-editmode-meta-row .lorebase-editmode-field { width: 104px; }
+.lorebase-editmode-title-meta > .lorebase-editmode-genres-field {
+    grid-column: 2;
+    margin: 0;
+    align-items: center;
+    min-height: 0;
+}
+.lorebase-editmode-title-meta .lorebase-editmode-chip-row { align-items: center; }
+@media (max-width: 700px) {
+    .lorebase-editmode-title-meta { grid-template-columns: 1fr; }
+    .lorebase-editmode-title-meta > .lorebase-editmode-meta-row,
+    .lorebase-editmode-title-meta > .lorebase-editmode-genres-field { grid-column: 1; }
+}
