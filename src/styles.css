@@ -13536,3 +13536,8 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-companion-card .lorebase-editmode-star { width: 32px; height: 32px; font-size: 1.05rem; border-radius: 9px; }
 .lorebase-companion-card .lorebase-editmode-stars { gap: 6px; }
 .lorebase-companion-rating-value { font-size: 1.25rem; }
+
+/* Title with the favorite heart beside it */
+.lorebase-editmode-view .lorebase-editmode-title-meta.is-in-sidebar .lorebase-editmode-title-row { display: flex; align-items: center; gap: 8px; }
+.lorebase-editmode-view .lorebase-editmode-title-meta.is-in-sidebar .lorebase-editmode-title-input { font-size: 1.15rem; font-weight: 600; flex: 1 1 auto; min-width: 0; }
+.lorebase-editmode-heart-btn.is-inline { flex: 0 0 auto; }

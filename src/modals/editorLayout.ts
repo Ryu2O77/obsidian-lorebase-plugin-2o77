@@ -42,6 +42,8 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         }
         // Genres and studio sit below the description.
         const extra = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-identity-extra' });
+        const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"]')?.closest<HTMLElement>('.lorebase-editmode-field');
+        if (creator) extra.appendChild(creator);
         const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
         if (studio) extra.appendChild(studio);
         const genres = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-genres-field');
@@ -117,11 +119,12 @@ function heartifyFavorite(root: HTMLElement): void {
     button.addClass('lorebase-editmode-heart-btn');
     button.empty();
     setIcon(button, 'heart');
-    // Always visible on the poster, so the quick-settings row is no longer needed.
-    const frame = root.querySelector<HTMLElement>('.lorebase-editmode-poster-frame');
-    if (!frame) return;
-    button.addClass('is-overlay');
-    frame.appendChild(button);
+    // Always visible next to the title, so the quick-settings row is no longer needed.
+    const titleRow = root.querySelector<HTMLElement>('.lorebase-editmode-title-meta .lorebase-editmode-title-row');
+    const host = titleRow ?? root.querySelector<HTMLElement>('.lorebase-editmode-poster-frame');
+    if (!host) return;
+    button.addClass(titleRow ? 'is-inline' : 'is-overlay');
+    host.appendChild(button);
     row?.remove();
     if (panel && !panel.querySelector('.lorebase-editmode-switch-row')) panel.addClass('is-hidden');
 }
