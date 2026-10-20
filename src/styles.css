@@ -13584,3 +13584,4 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-description-shell { border: 0; background: transparent; padding: 0; box-shadow: none; }
 .lorebase-editmode-description-shell .lorebase-editmode-notes-input { min-height: 0; overflow: hidden; resize: none; padding: 4px 2px; line-height: 1.5; }
 .lorebase-editmode-title-meta > .lorebase-editmode-original-title { grid-column: 1 / -1; margin: 0; }
+.lorebase-editmode-description-shell { margin: 0; max-height: none; overflow: visible; }
