@@ -13755,3 +13755,6 @@ button.lorebase-steamgriddb-chevron.is-open {
 }
 .lorebase-right-card > .is-flat + .is-flat { border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 45%, transparent); }
 .lorebase-right-card.is-list > .is-flat { padding-top: 10px; padding-bottom: 10px; }
+
+.lorebase-genres-block { display: flex; flex-direction: column; gap: 8px; }
+.lorebase-genres-block .lorebase-editmode-genres-field { display: block; margin: 0; min-height: 0; }

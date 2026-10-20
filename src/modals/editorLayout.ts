@@ -47,6 +47,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
             notes.removeClass('is-always-open');
             notes.setCssStyles({ display: 'none' });
         }
+        let genresBlock: HTMLElement | null = null;
         // One card of "label + value" rows: year, format, director/author, studio, genres.
         const facts = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-facts' });
         const metaRow = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-meta-row');
@@ -58,12 +59,15 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         const genres = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-genres-field');
         if (genres) {
             genres.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
-            const wrap = facts.createDiv({ cls: 'lorebase-editmode-field' });
-            wrap.createSpan({ cls: 'lorebase-editmode-field-label', text: t('genres') });
+            // Genres live in the right column list (grouped there later).
+            const wrap = createDiv({ cls: 'lorebase-genres-block' });
+            wrap.createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('genres') });
             wrap.appendChild(genres);
+            genresBlock = wrap;
         }
         if (facts.childElementCount > 0) poster.after(facts);
         if (facts.isConnected) facts.after(titleMeta);
+        if (genresBlock) right.appendChild(genresBlock);
     }
     mountMyNotes(center, options);
     if (titleMeta) wrapTitle(titleMeta);
@@ -408,6 +412,7 @@ function groupRightColumn(right: HTMLElement): void {
     };
     const top = make(['.lorebase-editmode-community-rating', '.lorebase-source-panel'], 'is-source');
     const list = make([
+        '.lorebase-genres-block',
         '.lorebase-editmode-advanced:not(.lorebase-editmode-tags)',
         '.lorebase-editmode-tags',
         '.lorebase-editmode-companions',
