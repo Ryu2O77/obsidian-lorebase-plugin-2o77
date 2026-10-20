@@ -13556,3 +13556,26 @@ button.lorebase-steamgriddb-chevron.is-open {
     .lorebase-editmode-status-rating.has-side-dates > .lorebase-editmode-rating-wrap,
     .lorebase-editmode-status-rating.has-side-dates > .lorebase-editmode-play-dates { grid-column: 1; }
 }
+
+/* Wrapping title */
+.lorebase-editmode-title-meta .lorebase-editmode-title-input.is-hidden { display: none; }
+.lorebase-editmode-title-area { resize: none; overflow: hidden; line-height: 1.3; font-family: inherit; }
+
+/* Identity inputs only show their box on hover / focus */
+.lorebase-editmode-title-meta.is-in-sidebar input:not([type="checkbox"]),
+.lorebase-editmode-title-meta.is-in-sidebar textarea,
+.lorebase-editmode-identity-extra input,
+.lorebase-editmode-identity-extra textarea {
+    background: transparent; border-color: transparent; box-shadow: none; transition: border-color .15s, background .15s;
+}
+.lorebase-editmode-title-meta.is-in-sidebar input:hover,
+.lorebase-editmode-title-meta.is-in-sidebar textarea:hover,
+.lorebase-editmode-identity-extra input:hover,
+.lorebase-editmode-identity-extra textarea:hover,
+.lorebase-editmode-title-meta.is-in-sidebar input:focus,
+.lorebase-editmode-title-meta.is-in-sidebar textarea:focus,
+.lorebase-editmode-identity-extra input:focus,
+.lorebase-editmode-identity-extra textarea:focus {
+    background: var(--background-modifier-form-field); border-color: var(--background-modifier-border);
+}
+.lorebase-editmode-view .lorebase-editmode-title-meta.is-in-sidebar .lorebase-editmode-title-area:not(:hover):not(:focus) { border-bottom-color: transparent; }

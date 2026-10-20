@@ -56,6 +56,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         if (extra.childElementCount > 0) titleMeta.after(extra);
     }
     mountMyNotes(center, options);
+    if (titleMeta) wrapTitle(titleMeta);
     // Start/finish dates sit beside the personal rating.
     const ratingWrap = status?.querySelector<HTMLElement>('.lorebase-editmode-rating-wrap');
     const playDates = status?.querySelector<HTMLElement>('.lorebase-editmode-play-dates');
@@ -149,4 +150,42 @@ function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
     const related = center.querySelector('.lorebase-editmode-related');
     if (related) related.before(panel);
     else center.appendChild(panel);
+}
+
+/**
+ * Swaps the single-line title box for an auto-growing one so long titles wrap instead of being cut.
+ * The original input stays in the DOM (hidden) as the source of truth: its value setter mirrors to
+ * the visible area, and typing in the area is forwarded as a normal `input` event.
+ */
+function wrapTitle(titleMeta: HTMLElement): void {
+    const input = titleMeta.querySelector<HTMLInputElement>('.lorebase-editmode-title-input');
+    if (!input || input.dataset.wrapped === 'true') return;
+    input.dataset.wrapped = 'true';
+    const area = createEl('textarea', { cls: 'lorebase-editmode-title-input lorebase-editmode-title-area', attr: { rows: '1', 'aria-label': input.getAttribute('aria-label') ?? '' } });
+    const resize = (): void => {
+        area.setCssStyles({ height: 'auto' });
+        area.setCssStyles({ height: `${area.scrollHeight}px` });
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    if (descriptor?.get && descriptor.set) {
+        const { get, set } = descriptor;
+        Object.defineProperty(input, 'value', {
+            configurable: true,
+            get() { return get.call(input) as string; },
+            set(next: string) { set.call(input, next); area.value = next; window.requestAnimationFrame(resize); },
+        });
+    }
+    area.value = input.value;
+    area.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
+    area.addEventListener('input', () => {
+        const flat = area.value.replace(/\n/g, ' ');
+        if (flat !== area.value) area.value = flat;
+        input.value = flat;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        resize();
+    });
+    input.after(area);
+    input.addClass('is-hidden');
+    window.requestAnimationFrame(resize);
+    window.setTimeout(resize, 150);
 }
