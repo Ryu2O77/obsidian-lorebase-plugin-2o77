@@ -162,7 +162,10 @@ function heartifyFavorite(root: HTMLElement): void {
     });
     new MutationObserver(sync).observe(original, { attributes: true, attributeFilter: ['class', 'aria-pressed'] });
     sync();
-    posterCard.createDiv({ cls: 'lorebase-poster-favorite-row' }).appendChild(heart);
+    // Back on the poster itself, in the top-right corner.
+    heart.removeClass('is-under-poster');
+    heart.addClass('is-overlay');
+    (posterCard.querySelector<HTMLElement>('.lorebase-editmode-poster-frame') ?? posterCard).appendChild(heart);
 
     row?.addClass('is-hidden');
     if (panel && !panel.querySelector('.lorebase-editmode-switch-row:not(.is-hidden)')) panel.addClass('is-hidden');
@@ -327,13 +330,12 @@ function growWithContent(area: HTMLTextAreaElement): void {
 
 /** Start / finish dates live under the poster, where there is room, instead of a mostly empty column. */
 function moveDatesUnderPoster(root: HTMLElement): void {
-    const row = root.querySelector<HTMLElement>('.lorebase-poster-favorite-row');
+    const facts = root.querySelector<HTMLElement>('.lorebase-editmode-facts');
     const card = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card');
     const dates = root.querySelector<HTMLElement>('.lorebase-editmode-status-rating .lorebase-editmode-play-dates');
     if (!dates) return;
-    // Same line as the favorite heart; the picker covers "today", so the extra buttons are dropped.
-    if (row) { row.addClass('has-dates'); row.appendChild(dates); }
-    else card?.appendChild(dates);
+    // Start / finish dates are rows of the facts card (year, director, ...).
+    (facts ?? card)?.appendChild(dates);
 }
 
 /** Hovering the personal rating stars previews the value (and half stars) before clicking. */
