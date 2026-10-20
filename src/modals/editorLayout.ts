@@ -1,6 +1,7 @@
 import { Platform, setIcon } from 'obsidian';
 import { t } from '../localization';
 import { bindStarHover, paintStars } from './halfStars';
+import { mountEpisodeNotes, type NoteKind } from './episodeNotes';
 
 export interface EditorLayoutOptions {
     /** Use the beta layout (poster rail + header + tabs) */
@@ -240,33 +241,27 @@ function applyBetaLayout(root: HTMLElement, left: HTMLElement, center: HTMLEleme
 function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
     if (!options.setMyNotes || center.querySelector('.lorebase-editmode-my-notes')) return;
     const panel = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-my-notes is-collapsed' });
-    const head = panel.createEl('button', { cls: 'lorebase-my-notes-head', attr: { type: 'button', 'aria-expanded': 'false' } });
-    head.createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editMyNotes') });
-    const preview = head.createSpan({ cls: 'lorebase-my-notes-preview' });
-    const caret = head.createSpan({ cls: 'lorebase-editmode-collapsible-caret', attr: { 'aria-hidden': 'true' } });
-    setIcon(caret, 'chevron-down');
-    const area = panel.createEl('textarea', { cls: 'lorebase-editmode-notes-input', attr: { 'data-field': 'my-notes', rows: '6' } });
-    const refresh = (): void => {
-        const first = area.value.split('\n').find((line) => line.trim().length > 0) ?? '';
-        preview.setText(first.trim() || '+');
-    };
+    const root = center.closest<HTMLElement>('.lorebase-editmode-view') ?? center;
+    const kind: NoteKind = root.querySelector('.lorebase-editmode-reading-progress')
+        ? 'chapters'
+        : root.querySelector('.lorebase-editmode-anime-parts') ? 'episodes' : 'none';
+    let current = options.getMyNotes?.() ?? '';
+    const handle = mountEpisodeNotes(panel, {
+        kind,
+        getValue: () => current,
+        setValue: (value) => { current = value; options.setMyNotes?.(value); },
+    });
+    // The modals fill this hidden field once the section has been read from the file; it forwards the text to the list.
+    const bridge = panel.createEl('textarea', { cls: 'lorebase-hidden-bridge', attr: { 'data-field': 'my-notes', 'aria-hidden': 'true', tabindex: '-1' } });
     const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
     if (descriptor?.get && descriptor.set) {
         const { get, set } = descriptor;
-        Object.defineProperty(area, 'value', {
+        Object.defineProperty(bridge, 'value', {
             configurable: true,
-            get() { return get.call(area) as string; },
-            set(next: string) { set.call(area, next); refresh(); },
+            get() { return get.call(bridge) as string; },
+            set(next: string) { set.call(bridge, next); current = next; handle.load(next); },
         });
     }
-    area.value = options.getMyNotes?.() ?? '';
-    area.addEventListener('input', () => { options.setMyNotes?.(area.value); refresh(); });
-    head.addEventListener('click', () => {
-        const collapsed = panel.hasClass('is-collapsed');
-        panel.toggleClass('is-collapsed', !collapsed);
-        head.setAttribute('aria-expanded', String(collapsed));
-        if (collapsed) area.focus();
-    });
     center.appendChild(panel);
 }
 

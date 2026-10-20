@@ -13790,3 +13790,55 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-view .lorebase-editmode-date-input-row > .lorebase-editmode-btn-tiny { display: none; }
 .lorebase-date-picker-footer { justify-content: space-between; }
 .lorebase-date-picker-footer > .lorebase-date-picker-footer-button:last-child { order: -1; }
+
+/* ===== Episode / chapter notes ===== */
+.lorebase-hidden-bridge { display: none; }
+.lorebase-ep-count { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); min-width: 0; }
+.lorebase-ep-count:not(:empty) { padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--background-modifier-border) 60%, transparent); }
+.lorebase-editmode-my-notes.is-collapsed .lorebase-ep-body { display: none; }
+.lorebase-ep-body { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.lorebase-ep-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lorebase-ep-add {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px dashed color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 55%, transparent);
+    background: transparent; color: var(--lorebase-accent, var(--interactive-accent)); font-size: 0.8rem; font-weight: 600; box-shadow: none;
+}
+.lorebase-ep-add:hover { background: color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 12%, transparent); }
+.lorebase-ep-add-icon svg { width: 14px; height: 14px; }
+.lorebase-ep-list { display: flex; flex-direction: column; gap: 10px; }
+.lorebase-ep-empty { padding: 14px; text-align: center; color: var(--text-faint); font-size: 0.82rem; border: 1px dashed var(--background-modifier-border); border-radius: var(--radius-m); }
+.lorebase-ep-note {
+    display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius-m);
+    border: 1px solid color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
+    background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
+    transition: border-color .15s;
+}
+.lorebase-ep-note:hover, .lorebase-ep-note:focus-within { border-color: color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 40%, var(--background-modifier-border)); }
+.lorebase-ep-note-head { display: flex; align-items: center; gap: 8px; }
+.lorebase-ep-codes { display: flex; gap: 4px; flex: 0 0 auto; }
+.lorebase-ep-code { display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 8px;
+    background: color-mix(in srgb, var(--lorebase-accent, var(--interactive-accent)) 14%, transparent); }
+.lorebase-ep-code-letter { font-size: 0.72rem; font-weight: 700; color: var(--lorebase-accent, var(--interactive-accent)); }
+.lorebase-editmode-view input.lorebase-ep-code-input {
+    width: 2.2em; padding: 0; height: auto; text-align: left; background: transparent; border: 0; box-shadow: none;
+    font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.lorebase-editmode-view input.lorebase-ep-title {
+    flex: 1 1 auto; min-width: 0; padding: 3px 4px; height: auto; background: transparent; border: 0; box-shadow: none; font-weight: 600; font-size: 0.9rem;
+}
+.lorebase-ep-tools { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.lorebase-ep-date { font-size: 0.7rem; color: var(--text-faint); margin-right: 4px; }
+.lorebase-ep-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border-radius: 6px;
+    background: transparent; border: 0; box-shadow: none; color: var(--text-faint); cursor: pointer;
+}
+.lorebase-ep-icon-btn svg { width: 15px; height: 15px; }
+.lorebase-ep-icon-btn:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.lorebase-ep-icon-btn.is-active { color: var(--lorebase-accent, var(--interactive-accent)); }
+.lorebase-ep-icon-btn.is-danger:hover, .lorebase-ep-icon-btn.is-armed { color: var(--text-error); }
+.lorebase-ep-icon-btn.is-hidden { display: none; }
+.lorebase-editmode-view textarea.lorebase-ep-note-body {
+    width: 100%; min-height: 44px; resize: none; overflow: hidden; padding: 2px 4px; background: transparent; border: 0; box-shadow: none;
+    line-height: 1.5; font-size: 0.86rem; transition: filter .2s;
+}
+.lorebase-ep-note.is-spoiler:not(:hover):not(:focus-within) textarea.lorebase-ep-note-body { filter: blur(6px); }
