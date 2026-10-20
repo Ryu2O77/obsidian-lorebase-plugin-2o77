@@ -13,6 +13,7 @@ import { GenreEditModal } from './GenreEditModal';
 import { paintStars, starValueFromClick } from './halfStars';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
+import { arrangeEditorLayout } from './editorLayout';
 import { setupMobileEditor } from './mobileEditor';
 import { extractMarkdownSection } from '../services/markdownSections';
 import { HierarchicalDatePicker, validateDatePickers } from './HierarchicalDatePicker';
@@ -155,6 +156,7 @@ export class AnimeEditModal extends Modal {
             renderCommunityRatingPanel(root, this.anime, this.onRefreshCommunityRating);
         }
         renderMediaSourcePanel(root, this.anime, this.onRefreshSource, this.onChangeSource);
+        arrangeEditorLayout(root);
         setupMobileEditor(root, () => void this.save());
     }
 

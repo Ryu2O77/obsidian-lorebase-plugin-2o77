@@ -11,6 +11,7 @@ import { i18n, t } from '../localization';
 import { GenreEditModal } from './GenreEditModal';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
+import { arrangeEditorLayout } from './editorLayout';
 import { extractMarkdownSection } from '../services/GameService';
 import { normalizeObsidianTag } from '../settings/settingsNormalization';
 import { RelatedMediaEditor } from './RelatedMediaEditor';
@@ -176,6 +177,7 @@ export class EditModal extends Modal {
             renderCommunityRatingPanel(root, this.game, this.onRefreshCommunityRating);
         }
         renderMediaSourcePanel(root, this.game, this.onRefreshSource, this.onChangeSource);
+        arrangeEditorLayout(root);
         void this.loadMyNotes(root);
     }
 

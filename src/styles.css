@@ -13452,3 +13452,38 @@ button.lorebase-steamgriddb-chevron.is-open {
     .lorebase-editmode-title-meta > .lorebase-editmode-meta-row,
     .lorebase-editmode-title-meta > .lorebase-editmode-genres-field { grid-column: 1; }
 }
+
+/* Identity panel living under the poster (narrow column): stack everything */
+.lorebase-editmode-title-meta.is-in-sidebar { grid-template-columns: 1fr; }
+.lorebase-editmode-title-meta.is-in-sidebar > .lorebase-editmode-meta-row,
+.lorebase-editmode-title-meta.is-in-sidebar > .lorebase-editmode-genres-field { grid-column: 1; }
+.lorebase-editmode-title-meta.is-in-sidebar .lorebase-editmode-meta-row .lorebase-editmode-field { width: 100%; }
+.lorebase-editmode-title-meta.is-in-sidebar > .lorebase-editmode-genres-field { grid-template-columns: 1fr; row-gap: 8px; }
+.lorebase-editmode-title-meta.is-in-sidebar .lorebase-editmode-title-meta-actions { justify-content: flex-start; }
+
+/* Favorite as a glowing heart */
+.lorebase-editmode-heart-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; padding: 0; border-radius: 50%;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-secondary);
+    color: var(--text-muted); cursor: pointer;
+    transition: color .15s, border-color .15s, box-shadow .2s, background .15s, transform .1s;
+}
+.lorebase-editmode-heart-btn svg { width: 18px; height: 18px; fill: none; transition: fill .15s, filter .2s; }
+.lorebase-editmode-heart-btn:hover { color: #ff5d7a; border-color: rgba(255, 93, 122, 0.5); }
+.lorebase-editmode-heart-btn:active { transform: scale(0.92); }
+.lorebase-editmode-heart-btn.is-active {
+    color: #ff4d6d; border-color: rgba(255, 77, 109, 0.75);
+    background: rgba(255, 77, 109, 0.12);
+    box-shadow: 0 0 14px rgba(255, 77, 109, 0.55), inset 0 0 8px rgba(255, 77, 109, 0.2);
+}
+.lorebase-editmode-heart-btn.is-active svg { fill: currentColor; filter: drop-shadow(0 0 5px rgba(255, 77, 109, 0.85)); }
+
+/* Per-person status/rating folded into the rating panel */
+.lorebase-companion-people-block {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
+    display: flex; flex-direction: column; gap: 8px;
+}
+.lorebase-editmode-companions.is-people-moved:not(:has(*)) { display: none; }

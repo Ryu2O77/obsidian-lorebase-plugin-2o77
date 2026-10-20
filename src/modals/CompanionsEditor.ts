@@ -76,14 +76,25 @@ export class CompanionsEditor {
     private render(): void {
         this.host.empty();
         if (this.options.showWatchedWith) {
-            this.host.createDiv({ cls: 'lorebase-editmode-panel-title-row' })
+            // When the editor has a status & rating panel, the per-person block lives there so it reads as part of the rating.
+            const ratingPanel = this.host.closest('.lorebase-editmode-view')?.querySelector<HTMLElement>('.lorebase-editmode-status-rating') ?? null;
+            let peopleHost = this.host;
+            if (ratingPanel) {
+                ratingPanel.querySelector('.lorebase-companion-people-block')?.remove();
+                peopleHost = createDiv({ cls: 'lorebase-companion-people-block' });
+                const dates = ratingPanel.querySelector('.lorebase-editmode-play-dates');
+                if (dates) dates.before(peopleHost);
+                else ratingPanel.appendChild(peopleHost);
+                this.host.addClass('is-people-moved');
+            }
+            peopleHost.createDiv({ cls: 'lorebase-editmode-panel-title-row' })
                 .createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editWatchedWith') });
-            this.peopleEl = this.host.createDiv({ cls: 'lorebase-editmode-chip-row' });
-            this.buildInput(this.host, t('editWatchedWithPlaceholder'), this.options.nameSuggestions, (value) => {
+            this.peopleEl = peopleHost.createDiv({ cls: 'lorebase-editmode-chip-row' });
+            this.buildInput(peopleHost, t('editWatchedWithPlaceholder'), this.options.nameSuggestions, (value) => {
                 this.watchedWith = addNames(this.watchedWith, [value]);
                 this.renderPeople();
             });
-            this.rowsEl = this.host.createDiv({ cls: 'lorebase-companion-rows' });
+            this.rowsEl = peopleHost.createDiv({ cls: 'lorebase-companion-rows' });
             this.renderPeople();
         }
         if (this.options.showFranchise) {

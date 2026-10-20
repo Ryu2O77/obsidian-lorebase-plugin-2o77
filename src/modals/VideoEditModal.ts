@@ -10,6 +10,7 @@ import { Companion, MovieItem, RelatedMediaLink, SeriesItem, UserRating, VideoPa
 import { GenreEditModal } from './GenreEditModal';
 import { CommunityRatingRefresh, renderCommunityRatingPanel } from './CommunityRatingPanel';
 import { MediaSourceAction, renderMediaSourcePanel } from './MediaSourcePanel';
+import { arrangeEditorLayout } from './editorLayout';
 import { setupMobileEditor } from './mobileEditor';
 import { bindSourceUrlButton } from './sourceUrlButton';
 import { extractMarkdownSection } from '../services/markdownSections';
@@ -161,6 +162,7 @@ export class VideoEditModal extends Modal {
             renderCommunityRatingPanel(root, this.item, this.onRefreshCommunityRating);
         }
         renderMediaSourcePanel(root, this.item, this.onRefreshSource, this.onChangeSource);
+        arrangeEditorLayout(root);
         setupMobileEditor(root, () => void this.save());
     }
 
