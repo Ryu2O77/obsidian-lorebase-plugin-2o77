@@ -13506,3 +13506,7 @@ button.lorebase-steamgriddb-chevron.is-open {
 
 .lorebase-editmode-notes.is-always-open.is-collapsed { display: block; }
 .lorebase-editmode-title-meta > .lorebase-editmode-studio-field { grid-column: 1 / -1; margin: 0; }
+
+.lorebase-editmode-identity-extra { display: flex; flex-direction: column; gap: 10px; }
+.lorebase-editmode-identity-extra .lorebase-editmode-genres-field { display: block; margin: 0; min-height: 0; }
+.lorebase-editmode-my-notes .lorebase-editmode-notes-input { width: 100%; resize: vertical; }

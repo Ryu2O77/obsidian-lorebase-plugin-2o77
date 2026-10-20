@@ -1,11 +1,18 @@
 import { Platform, setIcon } from 'obsidian';
+import { t } from '../localization';
+
+export interface EditorLayoutOptions {
+    /** Current "my notes" text and a setter, so the notes get their own box instead of a tab */
+    getMyNotes?: () => string;
+    setMyNotes?: (value: string) => void;
+}
 
 /**
  * Rearranges the editor panels into the final layout (identity under the poster,
  * rating first in the centre, source panels on top of the right column, collapsible tags,
  * heart favorite button). Works on any editor; panels that are missing are skipped.
  */
-export function arrangeEditorLayout(root: HTMLElement): void {
+export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOptions = {}): void {
     if (Platform.isMobile) return;
     const left = root.querySelector<HTMLElement>('.lorebase-editmode-column-left');
     const center = root.querySelector<HTMLElement>('.lorebase-editmode-column-center');
@@ -21,24 +28,37 @@ export function arrangeEditorLayout(root: HTMLElement): void {
         titleMeta.addClass('is-in-sidebar');
         if (notes) {
             titleMeta.after(notes);
-            // The description is always visible: no disclosure button, never collapsed.
+            // The description is always visible: no disclosure button, no tabs, never collapsed.
             notes.addClass('is-always-open');
             titleMeta.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
+            notes.querySelector('.lorebase-editmode-note-tabs')?.remove();
             notes.querySelector<HTMLTextAreaElement>('textarea')?.setAttribute('rows', '6');
         }
-        // Studio (anime) sits with the identity info instead of inside Advanced.
-        const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
-        if (studio) {
-            studio.addClass('lorebase-editmode-studio-field');
-            titleMeta.appendChild(studio);
+        // Genres and studio sit below the description.
+        const extra = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-identity-extra' });
+        const genres = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-genres-field');
+        if (genres) {
+            genres.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
+            const wrap = extra.createDiv({ cls: 'lorebase-editmode-field' });
+            wrap.createSpan({ cls: 'lorebase-editmode-field-label', text: t('genres') });
+            wrap.appendChild(genres);
         }
+        const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
+        if (studio) extra.appendChild(studio);
+        if (extra.childElementCount > 0) (notes ?? titleMeta).after(extra);
     }
-
+    mountMyNotes(center, options);
     // Chapters / seasons / episodes on top, rating right after.
     const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
     if (status) center.prepend(status);
     const progress = center.querySelector<HTMLElement>('.lorebase-editmode-anime-parts, .lorebase-editmode-reading-progress');
-    if (progress) center.prepend(progress);
+    if (progress) {
+        center.prepend(progress);
+        // Season status goes above the seasons strip.
+        const seasonStatus = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-part-status-field');
+        const navigation = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-parts-navigation');
+        if (seasonStatus && navigation) navigation.before(seasonStatus);
+    }
 
     // Community rating and metadata source on top of the right column.
     const source = right.querySelector<HTMLElement>('.lorebase-source-panel');
@@ -86,4 +106,18 @@ function heartifyFavorite(root: HTMLElement): void {
     frame.appendChild(button);
     row?.remove();
     if (panel && !panel.querySelector('.lorebase-editmode-switch-row')) panel.addClass('is-hidden');
+}
+
+/** "My notes" as its own panel in the centre column, instead of a tab on the description. */
+function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
+    if (!options.setMyNotes || center.querySelector('.lorebase-editmode-my-notes')) return;
+    const panel = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-my-notes' });
+    panel.createDiv({ cls: 'lorebase-editmode-panel-title-row' })
+        .createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editMyNotes') });
+    const area = panel.createEl('textarea', { cls: 'lorebase-editmode-notes-input', attr: { 'data-field': 'my-notes', rows: '5' } });
+    area.value = options.getMyNotes?.() ?? '';
+    area.addEventListener('input', () => options.setMyNotes?.(area.value));
+    const related = center.querySelector('.lorebase-editmode-related');
+    if (related) related.before(panel);
+    else center.appendChild(panel);
 }

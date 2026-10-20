@@ -156,7 +156,10 @@ export class AnimeEditModal extends Modal {
             renderCommunityRatingPanel(root, this.anime, this.onRefreshCommunityRating);
         }
         renderMediaSourcePanel(root, this.anime, this.onRefreshSource, this.onChangeSource);
-        arrangeEditorLayout(root);
+        arrangeEditorLayout(root, {
+            getMyNotes: () => this.myNotes,
+            setMyNotes: (value) => { this.myNotes = value; this.setText(root, '[data-role="saved-indicator"]', t('editUnsavedChanges')); },
+        });
         setupMobileEditor(root, () => void this.save());
     }
 
@@ -790,6 +793,8 @@ export class AnimeEditModal extends Modal {
         try {
             const content = await this.app.vault.read(file);
             this.myNotes = extractMarkdownSection(content);
+            const myBox = root.querySelector<HTMLTextAreaElement>('[data-field="my-notes"]');
+            if (myBox) myBox.value = this.myNotes;
             if (this.notesMode === 'myNotes') {
                 const summary = this.qs<HTMLTextAreaElement>(root, '[data-field="summary"]');
                 if (summary) summary.value = this.myNotes;

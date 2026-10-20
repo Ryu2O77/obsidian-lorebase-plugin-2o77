@@ -177,7 +177,10 @@ export class EditModal extends Modal {
             renderCommunityRatingPanel(root, this.game, this.onRefreshCommunityRating);
         }
         renderMediaSourcePanel(root, this.game, this.onRefreshSource, this.onChangeSource);
-        arrangeEditorLayout(root);
+        arrangeEditorLayout(root, {
+            getMyNotes: () => this.myNotes,
+            setMyNotes: (value) => { this.myNotes = value; this.setText(root, '[data-role="saved-indicator"]', t('editUnsavedChanges')); },
+        });
         void this.loadMyNotes(root);
     }
 
@@ -821,6 +824,8 @@ export class EditModal extends Modal {
         try {
             const content = await this.app.vault.read(file);
             this.myNotes = extractMarkdownSection(content);
+            const myBox = root.querySelector<HTMLTextAreaElement>('[data-field="my-notes"]');
+            if (myBox) myBox.value = this.myNotes;
             if (this.notesMode === 'myNotes') {
                 const notes = this.qs<HTMLTextAreaElement>(root, '[data-field="notes"]');
                 if (notes) {
