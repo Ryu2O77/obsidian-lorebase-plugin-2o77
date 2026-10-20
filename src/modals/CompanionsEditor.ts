@@ -95,10 +95,6 @@ export class CompanionsEditor {
             peopleHost.createDiv({ cls: 'lorebase-editmode-panel-title-row' })
                 .createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editWatchedWith') });
             this.peopleEl = peopleHost.createDiv({ cls: 'lorebase-editmode-chip-row' });
-            this.buildInput(peopleHost, t('editWatchedWithPlaceholder'), this.options.nameSuggestions, (value) => {
-                this.watchedWith = addNames(this.watchedWith, [value]);
-                this.renderPeople();
-            });
             this.rowsEl = peopleHost.createDiv({ cls: 'lorebase-companion-rows' });
             this.renderPeople();
         }
@@ -161,6 +157,39 @@ export class CompanionsEditor {
             });
             this.renderRow(this.ensure(name));
         }
+        this.renderAddPerson(this.peopleEl);
+    }
+
+    /** A "+" chip that turns into a small inline input to add one more person. */
+    private renderAddPerson(parent: HTMLElement): void {
+        const add = parent.createEl('button', {
+            cls: 'lorebase-editmode-chip lorebase-companion-add',
+            text: '+',
+            attr: { type: 'button', 'aria-label': t('editWatchedWithPlaceholder'), title: t('editWatchedWithPlaceholder') },
+        });
+        add.addEventListener('click', () => {
+            const listId = `lorebase-companion-list-${++datalistCounter}`;
+            const input = createEl('input', {
+                cls: 'lorebase-editmode-input lorebase-companion-add-input',
+                attr: { type: 'text', placeholder: t('editWatchedWithPlaceholder'), list: listId },
+            });
+            const datalist = createEl('datalist', { attr: { id: listId } });
+            for (const suggestion of this.options.nameSuggestions) datalist.createEl('option', { attr: { value: suggestion } });
+            add.replaceWith(input, datalist);
+            input.focus();
+            let done = false;
+            const finish = (commit: boolean): void => {
+                if (done) return;
+                done = true;
+                if (commit) this.watchedWith = addNames(this.watchedWith, parseNameList(input.value));
+                this.renderPeople();
+            };
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
+                else if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); event.stopPropagation(); finish(true); }
+            });
+            input.addEventListener('blur', () => finish(true));
+        });
     }
 
     private renderRow(entry: Companion): void {

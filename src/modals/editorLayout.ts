@@ -293,9 +293,13 @@ function growWithContent(area: HTMLTextAreaElement): void {
 
 /** Start / finish dates live under the poster, where there is room, instead of a mostly empty column. */
 function moveDatesUnderPoster(root: HTMLElement): void {
+    const row = root.querySelector<HTMLElement>('.lorebase-poster-favorite-row');
     const card = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card');
     const dates = root.querySelector<HTMLElement>('.lorebase-editmode-status-rating .lorebase-editmode-play-dates');
-    if (card && dates) card.appendChild(dates);
+    if (!dates) return;
+    // Same line as the favorite heart; the picker covers "today", so the extra buttons are dropped.
+    if (row) { row.addClass('has-dates'); row.appendChild(dates); }
+    else card?.appendChild(dates);
 }
 
 /** Hovering the personal rating stars previews the value (and half stars) before clicking. */

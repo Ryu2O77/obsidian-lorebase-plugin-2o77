@@ -13649,3 +13649,19 @@ button.lorebase-steamgriddb-chevron.is-open {
     display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; padding: 10px 0 0;
     border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 58%, transparent);
 }
+
+/* Heart + start/finish dates on one line under the poster */
+.lorebase-editmode-column-left > .lorebase-editmode-panel,
+.lorebase-editmode-column-center > .lorebase-editmode-panel { flex: 0 0 auto; }
+.lorebase-poster-favorite-row.has-dates { align-items: flex-end; justify-content: stretch; gap: 8px; }
+.lorebase-poster-favorite-row.has-dates .lorebase-editmode-heart-btn { flex: 0 0 auto; margin-bottom: 1px; }
+.lorebase-poster-favorite-row.has-dates > .lorebase-editmode-play-dates {
+    flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; padding: 0; border: 0;
+}
+.lorebase-poster-favorite-row .lorebase-editmode-btn-tiny { display: none; }
+.lorebase-poster-favorite-row .lorebase-editmode-date-input-row { display: block; }
+.lorebase-poster-favorite-row .lorebase-editmode-date-field .lorebase-editmode-field-label { font-size: 0.66rem; }
+
+/* "+" chip to add a person */
+.lorebase-companion-add { min-width: 30px; font-weight: 700; }
+.lorebase-companion-add-input { width: 150px; padding: 3px 8px; }
