@@ -58,9 +58,18 @@ function collapseTags(right: HTMLElement): void {
 function heartifyFavorite(root: HTMLElement): void {
     const button = root.querySelector<HTMLButtonElement>('[data-toggle="favorite"]');
     if (!button) return;
+    const row = button.closest<HTMLElement>('.lorebase-editmode-switch-row');
+    const panel = button.closest<HTMLElement>('.lorebase-editmode-quick-settings');
     button.removeClass('lorebase-editmode-switch');
     button.removeClass('lorebase-editmode-switch-favorite');
     button.addClass('lorebase-editmode-heart-btn');
     button.empty();
     setIcon(button, 'heart');
+    // Always visible on the poster, so the quick-settings row is no longer needed.
+    const frame = root.querySelector<HTMLElement>('.lorebase-editmode-poster-frame');
+    if (!frame) return;
+    button.addClass('is-overlay');
+    frame.appendChild(button);
+    row?.remove();
+    if (panel && !panel.querySelector('.lorebase-editmode-switch-row')) panel.addClass('is-hidden');
 }

@@ -13487,3 +13487,19 @@ button.lorebase-steamgriddb-chevron.is-open {
     display: flex; flex-direction: column; gap: 8px;
 }
 .lorebase-editmode-companions.is-people-moved:not(:has(*)) { display: none; }
+
+/* Poster overlay: tools on hover, favorite heart always visible */
+.lorebase-editmode-poster-frame { position: relative; }
+.lorebase-poster-overlay { position: absolute; inset: auto 0 0 0; padding: 28px 8px 8px; opacity: 0; transition: opacity .15s; pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent); }
+.lorebase-editmode-poster-frame:hover .lorebase-poster-overlay,
+.lorebase-poster-overlay:focus-within { opacity: 1; pointer-events: auto; }
+.lorebase-poster-overlay-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.lorebase-poster-overlay-tabs { display: flex; gap: 4px; }
+.lorebase-poster-overlay-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+    border-radius: var(--radius-s); border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(20, 20, 20, 0.65); color: #eee; cursor: pointer; }
+.lorebase-poster-overlay-btn svg { width: 16px; height: 16px; }
+.lorebase-poster-overlay-btn:hover { background: rgba(60, 60, 60, 0.85); }
+.lorebase-poster-overlay-btn.is-active { border-color: var(--lorebase-accent, var(--interactive-accent)); color: var(--lorebase-accent, var(--interactive-accent)); }
+.lorebase-editmode-heart-btn.is-overlay { position: absolute; top: 8px; right: 8px; z-index: 2; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(4px); color: #ddd; }
+.lorebase-editmode-quick-settings.is-hidden { display: none; }
