@@ -1,13 +1,9 @@
 import { Platform, setIcon } from 'obsidian';
 import { t } from '../localization';
 
-let betaRequested = false;
-/** Marks the next editor that opens as the beta layout (consumed when the layout is arranged). */
-export function requestBetaEditor(value: boolean): void {
-    betaRequested = value;
-}
-
 export interface EditorLayoutOptions {
+    /** Use the beta layout (poster rail + header + tabs) */
+    beta?: boolean;
     /** Current "my notes" text and a setter, so the notes get their own box instead of a tab */
     getMyNotes?: () => string;
     setMyNotes?: (value: string) => void;
@@ -67,6 +63,8 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
     }
     mountMyNotes(center, options);
     if (titleMeta) wrapTitle(titleMeta);
+    const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
+
     // Start/finish dates sit beside the personal rating.
     const ratingWrap = status?.querySelector<HTMLElement>('.lorebase-editmode-rating-wrap');
     const playDates = status?.querySelector<HTMLElement>('.lorebase-editmode-play-dates');
@@ -76,7 +74,6 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
     }
 
     // Chapters / seasons / episodes on top, rating right after.
-    const status = center.querySelector<HTMLElement>('.lorebase-editmode-status-rating');
     if (status) center.prepend(status);
     const progress = center.querySelector<HTMLElement>('.lorebase-editmode-anime-parts, .lorebase-editmode-reading-progress');
     if (progress) {
@@ -107,8 +104,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
 
     collapseTags(right);
     heartifyFavorite(root);
-    if (betaRequested) {
-        betaRequested = false;
+    if (options.beta) {
         applyBetaLayout(root, left, center, right);
     }
 }

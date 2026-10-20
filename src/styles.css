@@ -13634,3 +13634,6 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-beta-panes { display: flex; flex-direction: column; }
 .lorebase-beta-pane { display: none; flex-direction: column; gap: 10px; }
 .lorebase-beta-pane.is-active { display: flex; }
+
+.lorebase-editmode-status-rating.has-side-dates .lorebase-editmode-date-input-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lorebase-editmode-status-rating.has-side-dates .lorebase-editmode-date-control { flex: 1 1 130px; min-width: 0; width: auto; }

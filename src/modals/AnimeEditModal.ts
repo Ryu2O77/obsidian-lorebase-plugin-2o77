@@ -157,6 +157,7 @@ export class AnimeEditModal extends Modal {
         }
         renderMediaSourcePanel(root, this.anime, this.onRefreshSource, this.onChangeSource);
         arrangeEditorLayout(root, {
+            beta: (this as unknown as { useBetaLayout?: boolean }).useBetaLayout === true,
             getMyNotes: () => this.myNotes,
             setMyNotes: (value) => { this.myNotes = value; this.setText(root, '[data-role="saved-indicator"]', t('editUnsavedChanges')); },
         });

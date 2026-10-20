@@ -3,7 +3,6 @@
  * v3.0.1
  */
 
-import { requestBetaEditor } from './modals/editorLayout';
 import { parseNameList } from './services/media/people';
 import { configureHiddenFiles } from './services/media/hiddenFiles';
 import { Plugin, WorkspaceLeaf, Menu, Notice, addIcon, TFile, type Command } from 'obsidian';
@@ -906,15 +905,10 @@ export default class LorebasePlugin extends Plugin {
      * Show edit modal for a media item
      */
     showEditModal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void, beta = false): void {
-        requestBetaEditor(beta);
-        try {
-            this.openEditModalInternal(item, onSave, onBeforeSave);
-        } finally {
-            requestBetaEditor(false);
-        }
+        this.openEditModalInternal(item, onSave, onBeforeSave, beta);
     }
 
-    private openEditModalInternal(item: MediaItem, onSave: () => void, onBeforeSave?: () => void): void {
+    private openEditModalInternal(item: MediaItem, onSave: () => void, onBeforeSave: (() => void) | undefined, beta: boolean): void {
         if (item.type === 'anime') {
             const animeItem = item;
             const modal: AnimeEditModal = new AnimeEditModal(
@@ -984,6 +978,7 @@ export default class LorebasePlugin extends Plugin {
                     () => modal.saveBeforeSourceRefresh()
                 )
             );
+            (modal as unknown as { useBetaLayout?: boolean }).useBetaLayout = beta;
             modal.open();
             return;
         }
@@ -1022,6 +1017,7 @@ export default class LorebasePlugin extends Plugin {
                     () => modal.saveBeforeSourceRefresh()
                 )
             );
+            (modal as unknown as { useBetaLayout?: boolean }).useBetaLayout = beta;
             modal.open();
             return;
         }
@@ -1063,6 +1059,7 @@ export default class LorebasePlugin extends Plugin {
                     () => modal.saveBeforeSourceRefresh()
                 )
             );
+            (modal as unknown as { useBetaLayout?: boolean }).useBetaLayout = beta;
             modal.open();
             return;
         }
@@ -1109,7 +1106,8 @@ export default class LorebasePlugin extends Plugin {
                 ? () => this.steamSyncService!.fetchGameStats(this.settings.steamSync, steamAppIdForSync)
                 : undefined
         );
-        modal.open();
+        (modal as unknown as { useBetaLayout?: boolean }).useBetaLayout = beta;
+            modal.open();
     }
 
     async enrichMediaItem(
