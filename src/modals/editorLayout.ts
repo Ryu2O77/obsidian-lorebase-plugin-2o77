@@ -132,12 +132,12 @@ function heartifyFavorite(root: HTMLElement): void {
     button.addClass('lorebase-editmode-heart-btn');
     button.empty();
     setIcon(button, 'heart');
-    // Always visible next to the title, so the quick-settings row is no longer needed.
-    const titleRow = root.querySelector<HTMLElement>('.lorebase-editmode-title-meta .lorebase-editmode-title-row');
-    const host = titleRow ?? root.querySelector<HTMLElement>('.lorebase-editmode-poster-frame');
-    if (!host) return;
-    button.addClass(titleRow ? 'is-inline' : 'is-overlay');
-    host.appendChild(button);
+    // Always visible, under the poster, so the quick-settings row is no longer needed.
+    const posterCard = root.querySelector<HTMLElement>('.lorebase-editmode-poster-card');
+    if (!posterCard) return;
+    const favoriteRow = posterCard.createDiv({ cls: 'lorebase-poster-favorite-row' });
+    button.addClass('is-under-poster');
+    favoriteRow.appendChild(button);
     row?.remove();
     if (panel && !panel.querySelector('.lorebase-editmode-switch-row')) panel.addClass('is-hidden');
 }

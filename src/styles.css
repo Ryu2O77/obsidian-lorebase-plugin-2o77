@@ -13585,3 +13585,19 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-description-shell .lorebase-editmode-notes-input { min-height: 0; overflow: hidden; resize: none; padding: 4px 2px; line-height: 1.5; }
 .lorebase-editmode-title-meta > .lorebase-editmode-original-title { grid-column: 1 / -1; margin: 0; }
 .lorebase-editmode-description-shell { margin: 0; max-height: none; overflow: visible; }
+
+/* Favorite under the poster */
+.lorebase-poster-favorite-row { display: flex; justify-content: center; padding-top: 8px; }
+.lorebase-editmode-heart-btn.is-under-poster { width: 40px; height: 40px; }
+
+/* Description can be resized */
+.lorebase-editmode-description-shell .lorebase-editmode-notes-input { resize: vertical; }
+
+/* Hide an empty original title entirely */
+.lorebase-editmode-title-meta > .lorebase-editmode-original-title.is-hidden,
+.lorebase-editmode-title-meta > .lorebase-editmode-original-title:empty { display: none; }
+
+/* Seasons / chapters always first, rating second */
+.lorebase-editmode-column-center > .lorebase-editmode-anime-parts,
+.lorebase-editmode-column-center > .lorebase-editmode-reading-progress { order: -2; }
+.lorebase-editmode-column-center > .lorebase-editmode-status-rating { order: -1; }
