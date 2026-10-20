@@ -13677,3 +13677,81 @@ button.lorebase-steamgriddb-chevron.is-open {
     background: var(--background-modifier-form-field); border-color: var(--background-modifier-border);
 }
 .lorebase-editmode-poster-card .lorebase-editmode-title-input.is-hidden { display: none; }
+
+/* ===== Editor clean-up ===== */
+
+/* One panel style everywhere in the editor */
+.lorebase-editmode-view .lorebase-editmode-panel,
+.lorebase-editmode-view .lorebase-editmode-panel-glass {
+    border-radius: var(--radius-m);
+    border: 1px solid color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
+    background: color-mix(in srgb, var(--background-primary) 90%, transparent);
+    box-shadow: none;
+}
+
+/* Facts card: label + value rows */
+.lorebase-editmode-facts { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; }
+.lorebase-editmode-facts .lorebase-editmode-meta-row { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.lorebase-editmode-facts .lorebase-editmode-field {
+    display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: center; gap: 8px; margin: 0; width: 100%;
+}
+.lorebase-editmode-facts .lorebase-editmode-field-label { font-size: 0.7rem; }
+.lorebase-editmode-facts .lorebase-editmode-genres-field { display: block; margin: 0; min-height: 0; }
+.lorebase-editmode-facts input:not([type="checkbox"]) { background: transparent; border-color: transparent; box-shadow: none; }
+.lorebase-editmode-facts input:hover, .lorebase-editmode-facts input:focus {
+    background: var(--background-modifier-form-field); border-color: var(--background-modifier-border);
+}
+.lorebase-editmode-facts .lorebase-editmode-field + .lorebase-editmode-field,
+.lorebase-editmode-facts .lorebase-editmode-meta-row + .lorebase-editmode-field {
+    border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 40%, transparent); padding-top: 6px;
+}
+
+/* Description clamp */
+.lorebase-editmode-description-shell { position: relative; }
+.lorebase-editmode-description-shell.is-clamped .lorebase-editmode-notes-input { max-height: 6em; overflow: hidden; }
+.lorebase-editmode-description-shell.is-clamped::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 22px; height: 28px; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--background-primary) 95%, transparent));
+}
+.lorebase-desc-toggle { display: block; margin: 2px 0 0 2px; padding: 0; border: 0; background: none; box-shadow: none;
+    color: var(--text-muted); font-size: 0.75rem; cursor: pointer; }
+.lorebase-desc-toggle:hover { color: var(--text-normal); }
+.lorebase-desc-toggle.is-hidden { display: none; }
+
+/* Parts header: total + actions, no summary strip */
+.lorebase-editmode-anime-parts .lorebase-editmode-anime-part-summary { display: none; }
+.lorebase-editmode-anime-parts .lorebase-editmode-panel-title-row { display: flex; align-items: center; gap: 10px; }
+.lorebase-parts-total { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.lorebase-parts-title-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.lorebase-editmode-anime-part-inline-actions.is-empty { display: none; }
+
+/* Part editor on one row, name editable in place */
+.lorebase-editmode-anime-part-identity-row {
+    display: grid; grid-template-columns: minmax(130px, 1.6fr) 120px 90px minmax(150px, 1.2fr); gap: 8px; align-items: end;
+}
+.lorebase-editmode-anime-part-identity-row .lorebase-editmode-anime-part-meta-rail { display: contents; }
+.lorebase-editmode-anime-part-identity-row .lorebase-editmode-field-label { font-size: 0.66rem; opacity: 0.8; }
+.lorebase-editmode-anime-part-title-field input[data-field="part-title"] { background: transparent; border-color: transparent; font-weight: 600; }
+.lorebase-editmode-anime-part-title-field input[data-field="part-title"]:hover,
+.lorebase-editmode-anime-part-title-field input[data-field="part-title"]:focus {
+    background: var(--background-modifier-form-field); border-color: var(--background-modifier-border);
+}
+
+/* My notes collapsed by default */
+.lorebase-my-notes-head {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 2px 0; border: 0; background: none; box-shadow: none; cursor: pointer; text-align: left;
+}
+.lorebase-my-notes-preview { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-size: 0.82rem; }
+.lorebase-editmode-my-notes .lorebase-editmode-collapsible-caret { transition: transform .15s; }
+.lorebase-editmode-my-notes:not(.is-collapsed) .lorebase-editmode-collapsible-caret { transform: rotate(180deg); }
+.lorebase-editmode-my-notes.is-collapsed > textarea { display: none; }
+.lorebase-editmode-my-notes:not(.is-collapsed) > textarea { margin-top: 8px; width: 100%; resize: vertical; }
+.lorebase-editmode-my-notes:not(.is-collapsed) .lorebase-my-notes-preview { display: none; }
+
+/* Right column: one source card + one flat list */
+.lorebase-right-card { padding: 4px 12px; display: flex; flex-direction: column; }
+.lorebase-right-card > .is-flat {
+    border: 0; border-radius: 0; background: transparent; box-shadow: none; padding-left: 0; padding-right: 0;
+}
+.lorebase-right-card > .is-flat + .is-flat { border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 45%, transparent); }
+.lorebase-right-card.is-list > .is-flat { padding-top: 10px; padding-bottom: 10px; }

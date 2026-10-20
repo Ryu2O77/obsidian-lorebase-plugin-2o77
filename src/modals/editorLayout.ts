@@ -38,29 +38,32 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
                 area.setAttribute('rows', '6');
                 area.placeholder = t('editDescription');
                 shell.addClass('lorebase-editmode-description-shell');
-                titleMeta.insertBefore(shell, titleMeta.querySelector('.lorebase-editmode-genres-field'));
+                titleMeta.appendChild(shell);
                 // Original title goes right below the description.
                 const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
                 if (original) shell.after(original);
-                growWithContent(area);
+                clampDescription(shell, area);
             }
             notes.removeClass('is-always-open');
             notes.setCssStyles({ display: 'none' });
         }
-        // Genres and studio sit below the description.
-        const extra = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-identity-extra' });
+        // One card of "label + value" rows: year, format, director/author, studio, genres.
+        const facts = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-facts' });
+        const metaRow = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-meta-row');
+        if (metaRow) facts.appendChild(metaRow);
         const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"]')?.closest<HTMLElement>('.lorebase-editmode-field');
-        if (creator) extra.appendChild(creator);
+        if (creator) facts.appendChild(creator);
         const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
-        if (studio) extra.appendChild(studio);
+        if (studio) facts.appendChild(studio);
         const genres = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-genres-field');
         if (genres) {
             genres.querySelector('.lorebase-editmode-title-meta-actions')?.remove();
-            const wrap = extra.createDiv({ cls: 'lorebase-editmode-field' });
+            const wrap = facts.createDiv({ cls: 'lorebase-editmode-field' });
             wrap.createSpan({ cls: 'lorebase-editmode-field-label', text: t('genres') });
             wrap.appendChild(genres);
         }
-        if (extra.childElementCount > 0) titleMeta.after(extra);
+        if (facts.childElementCount > 0) poster.after(facts);
+        if (facts.isConnected) facts.after(titleMeta);
     }
     mountMyNotes(center, options);
     if (titleMeta) wrapTitle(titleMeta);
@@ -88,6 +91,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
             setIcon(completeAll, 'check-check');
             actions.prepend(completeAll);
         }
+        compactPartsHeader(progress);
     }
 
     // Community rating and metadata source on top of the right column.
@@ -97,6 +101,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
     if (community) right.prepend(community);
 
     collapseTags(right);
+    groupRightColumn(right);
     heartifyFavorite(root);
     moveTitleUnderPoster(root);
     moveDatesUnderPoster(root);
@@ -226,12 +231,34 @@ function applyBetaLayout(root: HTMLElement, left: HTMLElement, center: HTMLEleme
 /** "My notes" as its own panel in the centre column, instead of a tab on the description. */
 function mountMyNotes(center: HTMLElement, options: EditorLayoutOptions): void {
     if (!options.setMyNotes || center.querySelector('.lorebase-editmode-my-notes')) return;
-    const panel = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-my-notes' });
-    panel.createDiv({ cls: 'lorebase-editmode-panel-title-row' })
-        .createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editMyNotes') });
-    const area = panel.createEl('textarea', { cls: 'lorebase-editmode-notes-input', attr: { 'data-field': 'my-notes', rows: '5' } });
+    const panel = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-panel-glass lorebase-editmode-my-notes is-collapsed' });
+    const head = panel.createEl('button', { cls: 'lorebase-my-notes-head', attr: { type: 'button', 'aria-expanded': 'false' } });
+    head.createEl('h3', { cls: 'lorebase-editmode-panel-title', text: t('editMyNotes') });
+    const preview = head.createSpan({ cls: 'lorebase-my-notes-preview' });
+    const caret = head.createSpan({ cls: 'lorebase-editmode-collapsible-caret', attr: { 'aria-hidden': 'true' } });
+    setIcon(caret, 'chevron-down');
+    const area = panel.createEl('textarea', { cls: 'lorebase-editmode-notes-input', attr: { 'data-field': 'my-notes', rows: '6' } });
+    const refresh = (): void => {
+        const first = area.value.split('\n').find((line) => line.trim().length > 0) ?? '';
+        preview.setText(first.trim() || '+');
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if (descriptor?.get && descriptor.set) {
+        const { get, set } = descriptor;
+        Object.defineProperty(area, 'value', {
+            configurable: true,
+            get() { return get.call(area) as string; },
+            set(next: string) { set.call(area, next); refresh(); },
+        });
+    }
     area.value = options.getMyNotes?.() ?? '';
-    area.addEventListener('input', () => options.setMyNotes?.(area.value));
+    area.addEventListener('input', () => { options.setMyNotes?.(area.value); refresh(); });
+    head.addEventListener('click', () => {
+        const collapsed = panel.hasClass('is-collapsed');
+        panel.toggleClass('is-collapsed', !collapsed);
+        head.setAttribute('aria-expanded', String(collapsed));
+        if (collapsed) area.focus();
+    });
     center.appendChild(panel);
 }
 
@@ -341,4 +368,73 @@ function moveTitleUnderPoster(root: HTMLElement): void {
         titleRow.addClass('is-under-poster');
         frame.after(titleRow);
     }
+}
+
+/** Total + actions live in the parts header; the "Total / Active part" strip is hidden. */
+function compactPartsHeader(progress: HTMLElement): void {
+    const titleRow = progress.querySelector<HTMLElement>('.lorebase-editmode-panel-title-row');
+    if (!titleRow) return;
+    const heading = titleRow.querySelector<HTMLElement>('.lorebase-editmode-panel-title');
+    const total = progress.querySelector<HTMLElement>('[data-role="progress-total"]');
+    if (heading && total) {
+        total.addClass('lorebase-parts-total');
+        heading.after(total);
+    }
+    const tools = titleRow.createDiv({ cls: 'lorebase-parts-title-actions' });
+    const refresh = titleRow.querySelector<HTMLElement>('[data-action="refresh-parts"]');
+    if (refresh) tools.appendChild(refresh);
+    for (const action of ['complete-all-parts', 'add-part', 'remove-part']) {
+        const button = progress.querySelector<HTMLElement>(`[data-action="${action}"]`);
+        if (button) tools.appendChild(button);
+    }
+    progress.querySelector('.lorebase-editmode-anime-part-inline-actions')?.addClass('is-empty');
+}
+
+/** Right column: one card for community + source, one flat list for the collapsible / secondary blocks. */
+function groupRightColumn(right: HTMLElement): void {
+    if (right.querySelector('.lorebase-right-card')) return;
+    const make = (selectors: string[], cls: string): HTMLElement | null => {
+        const items = selectors.flatMap((selector) => {
+            const el = right.querySelector<HTMLElement>(selector);
+            return el ? [el] : [];
+        });
+        if (items.length === 0) return null;
+        const card = createDiv({ cls: `lorebase-editmode-panel lorebase-right-card ${cls}` });
+        for (const item of items) {
+            item.addClass('is-flat');
+            card.appendChild(item);
+        }
+        return card;
+    };
+    const top = make(['.lorebase-editmode-community-rating', '.lorebase-source-panel'], 'is-source');
+    const list = make([
+        '.lorebase-editmode-advanced:not(.lorebase-editmode-tags)',
+        '.lorebase-editmode-tags',
+        '.lorebase-editmode-companions',
+        '.lorebase-editmode-timestamps',
+    ], 'is-list');
+    if (list) right.prepend(list);
+    if (top) right.prepend(top);
+}
+
+const DESCRIPTION_CLAMP_PX = 96;
+
+/** Description: grows with its text but is clamped to a few lines, with a show more / less toggle. */
+function clampDescription(shell: HTMLElement, area: HTMLTextAreaElement): void {
+    growWithContent(area);
+    const toggle = shell.createEl('button', { cls: 'lorebase-desc-toggle', attr: { type: 'button' } });
+    let expanded = false;
+    const apply = (): void => {
+        const overflowing = area.scrollHeight > DESCRIPTION_CLAMP_PX + 6;
+        const focused = activeDocument.activeElement === area;
+        shell.toggleClass('is-clamped', overflowing && !expanded && !focused);
+        toggle.toggleClass('is-hidden', !overflowing);
+        toggle.setText(expanded ? t('editShowLess') : t('editShowMore'));
+    };
+    toggle.addEventListener('click', () => { expanded = !expanded; apply(); });
+    area.addEventListener('focus', () => shell.removeClass('is-clamped'));
+    area.addEventListener('blur', apply);
+    area.addEventListener('input', apply);
+    window.requestAnimationFrame(apply);
+    window.setTimeout(apply, 300);
 }
