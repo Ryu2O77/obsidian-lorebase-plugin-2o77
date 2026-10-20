@@ -13772,3 +13772,5 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-editmode-facts .lorebase-editmode-original-title { margin: -2px 0 0; padding-left: 2px; }
 .lorebase-editmode-facts .lorebase-editmode-original-title.is-hidden,
 .lorebase-editmode-facts .lorebase-editmode-original-title:empty { display: none; }
+
+.lorebase-editmode-title-meta > .lorebase-editmode-original-title { margin: 0 0 4px; padding-left: 2px; }

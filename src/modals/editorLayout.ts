@@ -50,9 +50,9 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         const facts = createDiv({ cls: 'lorebase-editmode-panel lorebase-editmode-facts' });
         const metaRow = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-meta-row');
         if (metaRow) facts.appendChild(metaRow);
-        // Original title goes right under the year.
+        // Original title sits right above the description.
         const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
-        if (original) facts.appendChild(original);
+        if (original) titleMeta.prepend(original);
         const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"]')?.closest<HTMLElement>('.lorebase-editmode-field');
         if (creator) facts.appendChild(creator);
         const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
