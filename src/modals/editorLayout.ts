@@ -461,17 +461,19 @@ function addPartChip(progress: HTMLElement): void {
     place();
 }
 
-/** "Episodes (8)": the total is the grey, editable number next to the label instead of a second field. */
+/** "Episodes (55)": the gray number is the whole series' total (sum of every part), while the stepper edits this part. */
 function totalInLabel(progress: HTMLElement): void {
     const field = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-episodes-field');
     const label = field?.querySelector<HTMLElement>('.lorebase-editmode-field-label');
-    const total = field?.querySelector<HTMLInputElement>('[data-field="part-episode-total"]');
-    if (!field || !label || !total) return;
-    label.createSpan({ cls: 'lorebase-ep-total-paren', text: ' (' });
-    total.addClass('lorebase-ep-total-input');
-    label.appendChild(total);
-    label.createSpan({ cls: 'lorebase-ep-total-paren', text: ')' });
-    field.querySelector('.lorebase-editmode-anime-slash')?.addClass('is-hidden');
+    const overall = progress.querySelector<HTMLElement>('[data-role="progress-total"]');
+    if (!field || !label || !overall) return;
+    const hint = label.createSpan({ cls: 'lorebase-ep-total-paren' });
+    const paint = (): void => {
+        const match = /\/\s*(\d+)/.exec(overall.textContent ?? '');
+        hint.setText(match ? ` (${match[1]})` : '');
+    };
+    new MutationObserver(paint).observe(overall, { childList: true, characterData: true, subtree: true });
+    paint();
 }
 
 /** Right column: one card for community + source, one flat list for the collapsible / secondary blocks. */
