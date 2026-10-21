@@ -13849,3 +13849,19 @@ button.lorebase-steamgriddb-chevron.is-open {
 .lorebase-related-caret { transition: transform .15s; display: inline-flex; color: var(--text-muted); }
 .lorebase-editmode-related:not(.is-collapsed) .lorebase-related-caret { transform: rotate(180deg); }
 .lorebase-editmode-related.is-collapsed > :not(.lorebase-editmode-panel-title-row) { display: none; }
+
+/* Season "+" as the last chip; delete confirmation; total in the episodes label */
+.lorebase-editmode-view .lorebase-part-add-chip {
+    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 999px; cursor: pointer;
+    background: transparent; border: 1px dashed var(--background-modifier-border); box-shadow: none; color: var(--text-muted);
+}
+.lorebase-part-add-chip:hover { color: var(--text-normal); border-color: var(--text-muted); }
+.lorebase-part-add-chip svg { width: 14px; height: 14px; }
+.lorebase-parts-title-actions .is-armed, .lorebase-editmode-anime-parts-icon-action.is-armed { color: var(--text-error); }
+.lorebase-ep-total-paren { color: var(--text-faint); }
+.lorebase-editmode-view input.lorebase-ep-total-input {
+    width: 3.2ch; padding: 0; height: auto; text-align: center; background: transparent; border: 0; border-bottom: 1px dashed transparent; box-shadow: none;
+    color: var(--text-faint); font: inherit; letter-spacing: inherit; text-transform: none;
+}
+.lorebase-editmode-view input.lorebase-ep-total-input:hover, .lorebase-editmode-view input.lorebase-ep-total-input:focus { border-bottom-color: var(--text-muted); color: var(--text-normal); }
+.lorebase-editmode-anime-slash.is-hidden { display: none; }

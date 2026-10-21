@@ -1,4 +1,4 @@
-import { Platform, setIcon } from 'obsidian';
+import { Notice, Platform, setIcon } from 'obsidian';
 import { t } from '../localization';
 import { bindStarHover, paintStars } from './halfStars';
 import { mountEpisodeNotes, type NoteKind } from './episodeNotes';
@@ -424,6 +424,54 @@ function compactPartsHeader(progress: HTMLElement): void {
         if (button) tools.appendChild(button);
     }
     progress.querySelector('.lorebase-editmode-anime-part-inline-actions')?.addClass('is-empty');
+    confirmPartRemoval(progress);
+    addPartChip(progress);
+    totalInLabel(progress);
+}
+
+/** Removing a season needs a second press (the first one arms the button). */
+function confirmPartRemoval(progress: HTMLElement): void {
+    const remove = progress.querySelector<HTMLButtonElement>('[data-action="remove-part"]');
+    if (!remove) return;
+    let armed = false;
+    remove.addEventListener('click', (event) => {
+        if (armed) {
+            armed = false;
+            remove.removeClass('is-armed');
+            return;
+        }
+        event.stopImmediatePropagation();
+        armed = true;
+        remove.addClass('is-armed');
+        new Notice(t('epNoteDeleteConfirm'), 1800);
+        window.setTimeout(() => { armed = false; remove.removeClass('is-armed'); }, 2500);
+    }, true);
+}
+
+/** The "+" that adds a season sits right after the last season chip. */
+function addPartChip(progress: HTMLElement): void {
+    const strip = progress.querySelector<HTMLElement>('[data-role="part-strip"]');
+    const add = progress.querySelector<HTMLButtonElement>('[data-action="add-part"]');
+    if (!strip || !add) return;
+    add.addClass('lorebase-part-add-chip');
+    const place = (): void => {
+        if (strip.lastElementChild !== add) strip.appendChild(add);
+    };
+    new MutationObserver(place).observe(strip, { childList: true });
+    place();
+}
+
+/** "Episodes (8)": the total is the grey, editable number next to the label instead of a second field. */
+function totalInLabel(progress: HTMLElement): void {
+    const field = progress.querySelector<HTMLElement>('.lorebase-editmode-anime-episodes-field');
+    const label = field?.querySelector<HTMLElement>('.lorebase-editmode-field-label');
+    const total = field?.querySelector<HTMLInputElement>('[data-field="part-episode-total"]');
+    if (!field || !label || !total) return;
+    label.createSpan({ cls: 'lorebase-ep-total-paren', text: ' (' });
+    total.addClass('lorebase-ep-total-input');
+    label.appendChild(total);
+    label.createSpan({ cls: 'lorebase-ep-total-paren', text: ')' });
+    field.querySelector('.lorebase-editmode-anime-slash')?.addClass('is-hidden');
 }
 
 /** Right column: one card for community + source, one flat list for the collapsible / secondary blocks. */
