@@ -465,8 +465,8 @@ export interface AnimeItem extends BaseMediaItem {
     genres: string[];
     /** Animation studios */
     studios?: string[];
-    /** Director(s), comma separated */
-    director?: string;
+    /** Author(s), comma separated */
+    authors?: string;
     /** Date added (from frontmatter or file stats) */
     dateAdded: number;
     /** Date watched (from frontmatter) */

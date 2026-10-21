@@ -267,7 +267,7 @@ export class AnimeService {
             const tags = collectTags(metadata, normalizeCacheTags(cache?.tags));
             const genres = collectFieldTags(metadata, ['genres', 'genre']);
             const studios = this.toDisplayList(metadata.studios ?? metadata.studio);
-            const director = this.toDisplayList(metadata.director ?? metadata.directors).join(', ');
+            const authors = this.toDisplayList(metadata.authors ?? metadata.author ?? metadata.director ?? metadata.directors).join(', ');
             const dateAdded = file.stat?.ctime ?? file.stat?.mtime ?? Date.now();
             const started = this.readDateText(metadata, ['started', 'dateStarted', 'start_date']);
             const finished = this.readDateText(metadata, ['finished', 'dateFinished', 'finish_date', 'dateWatched', 'watched']);
@@ -314,7 +314,7 @@ export class AnimeService {
                 episodeTotal: activePart?.episodeTotal ?? episodeTotal,
                 genres,
                 studios,
-                director,
+                authors,
                 started,
                 finished,
                 dateAdded,
@@ -442,9 +442,10 @@ export class AnimeService {
             const studios = this.toDisplayList(updates.studios);
             frontmatterUpdates.studios = studios.length ? studios : null;
         }
-        if ('director' in updates) {
-            const director = this.toDisplayList(updates.director);
-            frontmatterUpdates.director = director.length ? director.join(', ') : null;
+        if ('authors' in updates) {
+            const authors = this.toDisplayList(updates.authors);
+            frontmatterUpdates.authors = authors.length ? authors.join(', ') : null;
+            frontmatterUpdates.director = null;
         }
         if ('tags' in updates) frontmatterUpdates.tags = updates.tags?.length ? updates.tags : null;
         if ('relatedMedia' in updates) frontmatterUpdates.related_media = serializeRelatedMedia(updates.relatedMedia);
