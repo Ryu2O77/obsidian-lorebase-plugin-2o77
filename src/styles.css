@@ -13865,17 +13865,3 @@ button.lorebase-steamgriddb-chevron.is-open {
 }
 .lorebase-editmode-view input.lorebase-ep-total-input:hover, .lorebase-editmode-view input.lorebase-ep-total-input:focus { border-bottom-color: var(--text-muted); color: var(--text-normal); }
 .lorebase-editmode-anime-slash.is-hidden { display: none; }
-
-/* Add season "+" as the last chip of the strip */
-.lorebase-part-add-chip {
-    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 999px;
-    border: 1px dashed color-mix(in srgb, var(--text-muted) 55%, transparent); background: transparent; color: var(--text-muted); box-shadow: none; cursor: pointer;
-}
-.lorebase-part-add-chip:hover { color: var(--text-normal); border-color: var(--text-muted); }
-
-/* Two-step delete for a season */
-.lorebase-editmode-anime-parts-icon-action.is-armed { width: auto; padding: 0 8px; color: var(--text-error); font-size: 0.75rem; font-weight: 700; }
-.lorebase-editmode-anime-parts-icon-action.is-armed svg { display: none; }
-.lorebase-editmode-anime-parts-icon-action.is-armed::after { content: attr(data-confirm); }
-
-.lorebase-ep-total-hint { color: var(--text-faint); text-transform: none; letter-spacing: 0; }
