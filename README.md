@@ -6,7 +6,7 @@ This Fork was made with AI for personal use.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Obsidian-Plugin-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white" alt="Obsidian Plugin" />
-  <img src="https://img.shields.io/badge/Fork_Version-1.2.0-e4a47e?style=for-the-badge" alt="Fork Version" />
+  <img src="https://img.shields.io/badge/Fork_Version-1.2.1-e4a47e?style=for-the-badge" alt="Fork Version" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
   <img src="https://img.shields.io/badge/TypeScript-5.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
 </p>
