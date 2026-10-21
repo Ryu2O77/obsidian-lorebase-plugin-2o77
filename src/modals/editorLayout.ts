@@ -54,7 +54,7 @@ export function arrangeEditorLayout(root: HTMLElement, options: EditorLayoutOpti
         // Original title sits right above the description.
         const original = titleMeta.querySelector<HTMLElement>('.lorebase-editmode-original-title');
         if (original) titleMeta.prepend(original);
-        const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"]')?.closest<HTMLElement>('.lorebase-editmode-field');
+        const creator = root.querySelector<HTMLInputElement>('[data-field="director"], [data-field="authors"], [data-field="developer"]')?.closest<HTMLElement>('.lorebase-editmode-field');
         if (creator) facts.appendChild(creator);
         const studio = root.querySelector<HTMLInputElement>('[data-field="studios"]')?.closest<HTMLElement>('.lorebase-editmode-field');
         if (studio) facts.appendChild(studio);

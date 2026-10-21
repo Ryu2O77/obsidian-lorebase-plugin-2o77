@@ -59,6 +59,7 @@ export class AnimeEditModal extends Modal {
     private format: AnimeFormat;
     private genres: string[];
     private studios: string[];
+    private director: string;
     private tags: string[];
     private parts: PartDraft[];
     private companionsEditor?: CompanionsEditor;
@@ -118,6 +119,7 @@ export class AnimeEditModal extends Modal {
         this.format = anime.format ?? 'tv';
         this.genres = this.normalizeGenres(anime.genres ?? []);
         this.studios = this.normalizeDisplayList(anime.studios ?? []);
+        this.director = anime.director ?? '';
         this.tags = this.normalizeTags(anime.tags ?? []);
         this.parts = this.normalizeParts(anime.parts);
         this.relatedMedia = this.normalizeRelatedMedia(anime.relatedMedia ?? []);
@@ -387,6 +389,10 @@ export class AnimeEditModal extends Modal {
                             </summary>
                             <div class="lorebase-editmode-advanced-grid">
                                 <label class="lorebase-editmode-field">
+                                    <span class="lorebase-editmode-field-label">${t('templateFieldDirector')}</span>
+                                    <input class="lorebase-editmode-input" data-field="director" type="text" placeholder="Director A, Director B" />
+                                </label>
+                                <label class="lorebase-editmode-field">
                                     <span class="lorebase-editmode-field-label">${t('templateFieldStudios')}</span>
                                     <input class="lorebase-editmode-input" data-field="studios" type="text" placeholder="Studio A, Studio B" />
                                 </label>
@@ -455,6 +461,8 @@ export class AnimeEditModal extends Modal {
         if (year) year.value = this.year ? String(this.year) : '';
         const studios = this.qs<HTMLInputElement>(root, '[data-field="studios"]');
         if (studios) studios.value = this.studios.join(', ');
+        const directorInput = this.qs<HTMLInputElement>(root, '[data-field="director"]');
+        if (directorInput) directorInput.value = this.director;
         const path = this.qs<HTMLElement>(root, '[data-role="local-path"]');
         if (path) path.textContent = this.anime.filePath;
         const summary = this.qs<HTMLTextAreaElement>(root, '[data-field="summary"]');
@@ -557,6 +565,8 @@ export class AnimeEditModal extends Modal {
             this.year = this.parseNumberInput(year.value);
         });
 
+        const directorField = this.qs<HTMLInputElement>(root, '[data-field="director"]');
+        directorField?.addEventListener('input', () => { this.director = directorField.value; });
         const studios = this.qs<HTMLInputElement>(root, '[data-field="studios"]');
         studios?.addEventListener('input', () => {
             this.studios = this.normalizeDisplayList(studios.value.split(/[,;\n]+/));
@@ -1470,6 +1480,7 @@ export class AnimeEditModal extends Modal {
             integrationId: this.anime.integrationId ?? null,
             genres: this.genres,
             studios: this.studios,
+            director: this.director.trim(),
             tags: this.tags,
             parts: this.parts,
             activePartId: activePart?.id ?? this.activePartId,
